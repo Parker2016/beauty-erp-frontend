@@ -32,6 +32,20 @@ export const adminService = {
   // 2. 基礎建設：服務品項管理 (ServiceItem CRUD)
   // ==========================================
 
+  // 💡 1. 撈取全店的預約單列表（包含巢狀的施作紀錄）
+  getAppointmentsWithRecords: async (shopId = 1) => {
+    return http.get('admin/appointments-records/', {
+      params: { shop_id: shopId }
+    });
+  },
+
+  // 💡 2. 聯合更新 API（同時修改預約狀態與 1:1 的施作紀錄）
+  updateAppointmentWithRecord: async (appointmentId, data, shopId = 1) => {
+    return http.put(`admin/appointments-records/${appointmentId}/`, data, {
+      params: { shop_id: shopId }
+    });
+  },
+
   /**
    * 取得該店家所有服務品項列表
    * @param {number} [shopId=1] - 店家 ID
