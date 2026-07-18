@@ -13,7 +13,16 @@ export const useAdminDashboard = () => {
   // 記錄業主當前點擊選中的預約項目 (用於右側抽屜或側邊欄)
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
-  // 輔助函式：計算給定日期所在那一週的週一與週日 (YYYY-MM-DD)
+  // 💡 修正地雷一：使用安全的原生本地時間格式化，徹底抹除 UTC 減 8 小時的破版地雷
+  const safeFormatDate = useCallback((d) => {
+    const year = d.getFullYear();
+    // getMonth 預設從 0 開始，所以必須外加 1，並用 padStart 補足兩位數
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // 輔助函式：計算給定日期所在那一週的週一與週日
   const getWeekRange = useCallback((date) => {
     const current = new Date(date);
     const day = current.getDay();
@@ -24,9 +33,8 @@ export const useAdminDashboard = () => {
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 
-    const formatDate = (d) => d.toISOString().split('T')[0];
-    return { monday: formatDate(monday), sunday: formatDate(sunday) };
-  }, []);
+    return { monday: safeFormatDate(monday), sunday: safeFormatDate(sunday) };
+  }, [safeFormatDate]);
 
   // 取得當前週的 7 個天數陣列，供 UI 畫出星期一到日
   const weekDays = useMemo(() => {
@@ -40,6 +48,7 @@ export const useAdminDashboard = () => {
   }, [currentDate, getWeekRange]);
 
   // 刷新核心看板與行事曆數據
+  // 💡 修正地雷二：依賴項拔除 selectedAppointment，讓 Fetch 函式回歸純粹，中斷死循環誘因
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -54,22 +63,34 @@ export const useAdminDashboard = () => {
       
       setStats(statsRes);
       setAppointments(calendarRes);
-      
-      // 預設將第一筆預約設為選中狀態 (仿截圖右側面板預設有資料)
-      if (calendarRes.length > 0 && !selectedAppointment) {
-        setSelectedAppointment(calendarRes[0]);
-      }
     } catch (err) {
       setError('載入後台數據失敗，請檢查後端連線。');
     } finally {
       setLoading(false);
     }
-  }, [currentDate, getWeekRange, selectedAppointment]);
+  }, [currentDate, getWeekRange]);
 
   // 當日期定錨改變時，自動重新載入該週資料
   useEffect(() => {
     fetchDashboardData();
-  }, [currentDate]);
+  }, [currentDate, fetchDashboardData]);
+
+  // ==========================================
+  // 💡 核心補強：獨立管轄「自動預選」的職責分離狀態機
+  // ==========================================
+  useEffect(() => {
+    // 只有當後端撈回來的預約單有資料，而且「當前是大螢幕電腦版」時，才允許自動勾選第一筆
+    if (appointments.length > 0) {
+      if (window.innerWidth >= 1024) {
+        setSelectedAppointment(appointments[0]);
+      } else {
+        // 📱 如果是手機版，一切換回來必須強制歸零 null，防止抽屜盲目跳出
+        setSelectedAppointment(null);
+      }
+    } else {
+      setSelectedAppointment(null);
+    }
+  }, [appointments]); // 僅在預約單陣列重新整理時觸發檢查
 
   // 切換週的方法
   const navigateWeek = (direction) => {
