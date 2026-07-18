@@ -8,14 +8,20 @@ export const bookingService = {
    */
   getProviders: () => http.get('providers/'),
   
+  getAvailableSlots: async (providerId, serviceId, date) => {
+    // 發送 GET 請求到：/api/providers/{id}/available_slots/?date=2026-07-18&service_id=2
+    return http.get(`providers/${providerId}/available_slots/`, {
+      params: {
+        date: date,
+        service_id: serviceId
+      }
+    });
+  },
+
   /**
    * 送出預約訂單
    * 對應 Django: POST /api/appointments/ (Write Flat)
    * @param {Object} payload - { provider_id, service_id, customer_id, start_time }
    */
   createAppointment: (payload) => http.post('appointments/', payload),
-
-  // 未來如果要串接剛才在 Django 寫的 get_available_slots，可以加在這裡
-  // getAvailableSlots: (providerId, date, serviceId) => 
-  //   http.get(`providers/${providerId}/slots/?date=${date}&service_id=${serviceId}`)
 };
