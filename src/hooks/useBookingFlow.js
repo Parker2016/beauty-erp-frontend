@@ -1,5 +1,5 @@
 // src/hooks/useBookingFlow.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { bookingService } from '../services/booking';
 
 export const useBookingFlow = () => {
@@ -7,6 +7,10 @@ export const useBookingFlow = () => {
   const [providers, setProviders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // 💡 新增：針對時間空檔的獨立狀態，避免干擾主頁面的全螢幕載入
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
   // 2. 預約流程狀態 (UI 依據 step 來切換畫面)
   const [step, setStep] = useState(1); 
@@ -40,21 +44,42 @@ export const useBookingFlow = () => {
     setSelectedService(service);
     setStep(3); // 自動進入步驟 3：選時間
     setError(null);
+    setAvailableSlots([]); // 💡 確保換項目時，先清空上一次的時間快取
   };
+
+  // 使用 useCallback 包裹，防止 UI 元件重新渲染時導致無效的重複請求
+  const fetchAvailableSlots = useCallback(async (providerId, serviceId, dateString) => {
+    setIsSlotsLoading(true);
+    setError(null);
+    try {
+      // 呼叫後端 API，傳入美甲師ID、服務ID、以及格式化後的日期 (例如: 2026-07-18)
+      const data = await bookingService.getAvailableSlots(providerId, serviceId, dateString);
+      
+      // 假設後端回傳格式為：[{ start_time: "2026-07-18T10:00:00+08:00", end_time: "..." }, ...]
+      // 我們在前端可以將它轉換為 ['10:00', '13:30'] 這種純時間字串供月曆按鈕顯示
+      const pureTimes = data.map(slot => {
+        const date = new Date(slot.start_time);
+        return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+      });
+      
+      setAvailableSlots(pureTimes);
+    } catch (err) {
+      setError('無法撈取該日期的可用時段，請更換日期試試');
+      setAvailableSlots([]);
+    } finally {
+      setIsSlotsLoading(false);
+    }
+  }, []);
 
   const submitBooking = async (startTime, customerData) => {
     setIsLoading(true);
     setError(null);
     try {
-      // 這裡完全符合 Django AppointmentCreateSerializer 的格式要求
       const payload = {
         provider_id: selectedProvider.id,
         service_id: selectedService.id,
-        // 目前測試階段，因為後端沒有自動建立客人的邏輯，我們寫死為 1
-        // (請確保你在 Django Admin 裡面有建立 id=1 的 Customer！)
-        customer_id: 1, 
+        customer_id: 1, // 測試階段先寫死，未來整合 LINE 登入後帶入真實顧客 ID
         start_time: startTime,
-        // 把客人的表單資料，暫時全部塞進 memo 裡面，這樣後台才看得到
         memo: `[聯絡資訊]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n\n[客人備註]\n${customerData.memo || '無'}`
       };
       
@@ -62,7 +87,6 @@ export const useBookingFlow = () => {
       setStep(5); // 進入步驟 5：預約成功畫面
       return true;
     } catch (err) {
-      // 捕捉 Django Serializer ValidationError 丟回來的錯誤
       const errorMsg = err.response?.data?.start_time || '預約失敗，請確認時段是否被搶走';
       setError(errorMsg);
       return false;
@@ -80,6 +104,7 @@ export const useBookingFlow = () => {
     setStep(1);
     setSelectedProvider(null);
     setSelectedService(null);
+    setAvailableSlots([]); // 💡 重設流程時清空時間
     setError(null);
   };
 
@@ -92,6 +117,9 @@ export const useBookingFlow = () => {
     setStep,
     selectedProvider,
     selectedService,
+    availableSlots,     // 💡 釋放給 BookingPage.jsx 渲染時間按鈕
+    isSlotsLoading,     // 💡 釋放給 BookingPage.jsx 顯示時段的小圈圈 Loading
+    fetchAvailableSlots,// 💡 釋放給 BookingPage.jsx 的 useEffect 監聽呼叫
     selectProvider,
     selectService,
     submitBooking,
