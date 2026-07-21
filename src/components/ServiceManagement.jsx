@@ -1,7 +1,7 @@
 // src/components/ServiceManagement.jsx
 import React from 'react';
 import { useServiceManagement } from '../hooks/useServiceManagement';
-import ServiceItemModal from './ServiceItemModal'; // 引入剛剛獨立出去的彈窗
+import ServiceItemModal from './ServiceItemModal';
 
 const ServiceManagement = () => {
   const {
@@ -9,6 +9,25 @@ const ServiceManagement = () => {
     formData, setFormData, editingService, openCreateModal, openEditModal,
     toggleProviderCheckbox, handleSave, handleDelete
   } = useServiceManagement();
+
+  // 💡 輔助函式：動態轉譯價格模式文字
+  const renderPriceTag = (item) => {
+    if (item.price_type === 'QUOTE') return <span className="text-gray-500 font-bold">現場報價</span>;
+    if (item.price_type === 'STARTING') return <span className="text-amber-800 font-black">NT$ {item.price} <span className="text-xs font-normal text-amber-600">起</span></span>;
+    return <span className="text-amber-800 font-black">NT$ {item.price}</span>;
+  };
+
+  // 💡 輔助函式：動態渲染類別標籤顏色
+  const renderCategoryBadge = (category) => {
+    const mapping = {
+      'HAND': { label: '手部服務', className: 'bg-pink-50 text-pink-600 border-pink-100' },
+      'FOOT': { label: '足部服務', className: 'bg-purple-50 text-purple-600 border-purple-100' },
+      'PURE_REMOVAL': { label: '純卸甲', className: 'bg-blue-50 text-blue-600 border-blue-100' },
+      'ADDON': { label: '加購項目', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+    };
+    const target = mapping[category] || { label: category, className: 'bg-gray-50 text-gray-600 border-gray-100' };
+    return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${target.className}`}>{target.label}</span>;
+  };
 
   return (
     <div className="space-y-6 text-left">
@@ -33,8 +52,9 @@ const ServiceManagement = () => {
             <tr className="border-b border-gray-100">
               <th className="p-4 text-center w-16">ID</th>
               <th className="p-4">項目名稱</th>
+              <th className="p-4">服務類別</th>
               <th className="p-4">預估時間</th>
-              <th className="p-4">定價</th>
+              <th className="p-4">定價模式</th>
               <th className="p-4">可提供服務人員 (ManyToMany)</th>
               <th className="p-4 text-center w-32">操作</th>
             </tr>
@@ -44,11 +64,17 @@ const ServiceManagement = () => {
               <tr key={s.id} className="hover:bg-gray-50/40 transition-colors">
                 <td className="p-4 text-center font-mono font-bold text-gray-400">#{s.id}</td>
                 <td className="p-4">
-                  <p className="font-bold text-gray-800 text-base">{s.name}</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="font-bold text-gray-800 text-base">{s.name}</p>
+                    {s.is_addon && <span className="text-[9px] bg-red-50 text-red-500 font-bold px-1.5 py-0.5 rounded border border-red-100">可加購</span>}
+                  </div>
                   <p className="text-xs text-gray-400 mt-0.5 max-w-xs truncate">{s.description || '無詳細描述'}</p>
                 </td>
+                {/* 💡 新增：服務類別顯示欄 */}
+                <td className="p-4">{renderCategoryBadge(s.category)}</td>
                 <td className="p-4 font-medium text-gray-700">⏱ {s.duration_minutes} 分鐘</td>
-                <td className="p-4 font-black text-amber-800">NT$ {s.price}</td>
+                {/* 💡 修正：動態價格欄 */}
+                <td className="p-4 font-black">{renderPriceTag(s)}</td>
                 <td className="p-4">
                   <div className="flex flex-wrap gap-1">
                     {s.providers?.map(p => (
@@ -72,15 +98,19 @@ const ServiceManagement = () => {
       {/* ================= 行動裝置端（Card 版面） ================= */}
       <div className="block md:hidden space-y-3">
         {services.map(s => (
-          <div key={s.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+          <div key={s.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3 text-left">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[9px] font-mono font-bold text-gray-300">#{s.id}</span>
-                <h4 className="text-base font-black text-gray-800">{s.name}</h4>
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-[9px] font-mono font-bold text-gray-300">#{s.id}</span>
+                  {renderCategoryBadge(s.category)}
+                  {s.is_addon && <span className="text-[9px] bg-red-50 text-red-500 font-bold px-1.5 py-0.2 rounded">可加購</span>}
+                </div>
+                <h4 className="text-base font-black text-gray-800 mt-1">{s.name}</h4>
               </div>
-              <span className="text-sm font-black text-amber-800">NT$ {s.price}</span>
+              <div className="text-right text-sm font-black">{renderPriceTag(s)}</div>
             </div>
-            <p className="text-xs text-gray-400 leading-relaxed">{s.description || '無描述'}</p>
+            <p className="text-xs text-gray-400 leading-relaxed truncate">{s.description || '無描述'}</p>
             <div className="flex justify-between items-center pt-2 border-t border-gray-50">
               <span className="text-xs font-medium text-gray-500">⏱ {s.duration_minutes} 分鐘</span>
               <div className="space-x-3">
@@ -92,12 +122,11 @@ const ServiceManagement = () => {
         ))}
       </div>
 
-      {/* ================= 載入獨立的彈窗組件 ================= */}
       <ServiceItemModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         formData={formData}
-        setFormData={setFormData} // 這裡把狀態修改器傳過去，對齊我們在 Hook 裡面新增的狀態
+        setFormData={setFormData}
         providerOptions={providerOptions}
         editingService={editingService}
         toggleProviderCheckbox={toggleProviderCheckbox}

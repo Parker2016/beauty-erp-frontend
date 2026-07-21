@@ -3,21 +3,40 @@ import { useState, useEffect, useCallback } from 'react';
 import { bookingService } from '../services/booking';
 
 export const useBookingFlow = () => {
-  // 1. 系統資料狀態
+  // ==========================================
+  // 1. 核心系統數據狀態
+  // ==========================================
   const [providers, setProviders] = useState([]);
+  const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 💡 新增：針對時間空檔的獨立狀態，避免干擾主頁面的全螢幕載入
+  // 時間空檔獨立狀態
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
-  // 2. 預約流程狀態 (UI 依據 step 來切換畫面)
-  const [step, setStep] = useState(1); 
-  const [selectedProvider, setSelectedProvider] = useState(null);
-  const [selectedService, setSelectedService] = useState(null);
+  // ==========================================
+  // 2. 6 步預約流程狀態機
+  // ==========================================
+  const [step, setStep] = useState(1);
 
-  // 初始化：元件載入時自動去 Django 撈取美業師名單
+  // 使用者填寫的個人資料狀態
+  const [customerData, setCustomerData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    birthday: '',
+    memo: ''
+  });
+
+  const [selectedProvider, setSelectedProvider] = useState(null);
+  // 💡 核心變革 1：主服務由單選物件改為多選陣列
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [selectedAddons, setSelectedAddons] = useState([]);
+
+  // ==========================================
+  // 3. 資料初始化掛載
+  // ==========================================
   useEffect(() => {
     const fetchProviders = async () => {
       setIsLoading(true);
@@ -33,61 +52,134 @@ export const useBookingFlow = () => {
     fetchProviders();
   }, []);
 
-  // 3. 流程控制方法 (暴露給 UI Page 綁定 onClick)
-  const selectProvider = (provider) => {
+  // ==========================================
+  // 4. 各步驟精準控制方法 (暴露給 UI 使用)
+  // ==========================================
+
+  // 步驟 1 ➔ 2：提交客戶基本資料
+  const submitCustomerData = (data) => {
+    setCustomerData(data);
+    setStep(2);
+    setError(null);
+  };
+
+  // 步驟 2 ➔ 3：選定美甲師
+  const selectProvider = async (provider) => {
     setSelectedProvider(provider);
-    setStep(2); // 自動進入步驟 2：選服務
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await bookingService.getServicesByProvider(provider.id);
+      setServices(data);
+      setSelectedServices([]); // 清空上一次選的主服務
+      setSelectedAddons([]);   // 清空上一次選的加購項
+      setStep(3);
+    } catch (err) {
+      setError('無法載入該美甲師的造型服務項目，請換人試試或稍後再試。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 💡 核心變革 2：步驟 3 專用 — 切換主服務項目的勾選狀態 (M2M 多選邏輯)
+  const toggleService = (serviceItem) => {
+    setSelectedServices(prev => {
+      const isExist = prev.some(item => item.id === serviceItem.id);
+      if (isExist) {
+        return prev.filter(item => item.id !== serviceItem.id);
+      } else {
+        return [...prev, serviceItem];
+      }
+    });
+  };
+
+  // 💡 核心變革 3：步驟 3 ➔ 4 — 確認主服務 (需防呆確認至少選 1 項) 並前往加購區
+  const confirmServicesAndGoToAddons = () => {
+    if (selectedServices.length === 0) {
+      setError('請至少選擇一項主服務造型項目。');
+      return;
+    }
+    setStep(4); // 跳轉至加購項目區
+    setError(null);
+    setSelectedAddons([]); // 清空加購項
+    setAvailableSlots([]);  // 清空時段快取
+  };
+
+  // 步驟 4 專用：切換加購項目的勾選狀態 (M2M 多選邏輯)
+  const toggleAddon = (addonItem) => {
+    setSelectedAddons(prev => {
+      const isExist = prev.some(item => item.id === addonItem.id);
+      if (isExist) {
+        return prev.filter(item => item.id !== addonItem.id);
+      } else {
+        return [...prev, addonItem];
+      }
+    });
+  };
+
+  // 步驟 4 ➔ 5：確認加購項，前往時間排班表
+  const confirmAddonsAndGoToCalendar = () => {
+    setStep(5);
     setError(null);
   };
 
-  const selectService = (service) => {
-    setSelectedService(service);
-    setStep(3); // 自動進入步驟 3：選時間
-    setError(null);
-    setAvailableSlots([]); // 💡 確保換項目時，先清空上一次的時間快取
-  };
-
-  // 使用 useCallback 包裹，防止 UI 元件重新渲染時導致無效的重複請求
-  const fetchAvailableSlots = useCallback(async (providerId, serviceId, dateString) => {
+  // ==========================================
+  // 5. 核心異步：串接多選主服務與加購時間的可用時段計算
+  // ==========================================
+  const fetchAvailableSlots = useCallback(async (providerId, dateString) => {
     setIsSlotsLoading(true);
     setError(null);
     try {
-      // 呼叫後端 API，傳入美甲師ID、服務ID、以及格式化後的日期 (例如: 2026-07-18)
-      const data = await bookingService.getAvailableSlots(providerId, serviceId, dateString);
-      
-      // 假設後端回傳格式為：[{ start_time: "2026-07-18T10:00:00+08:00", end_time: "..." }, ...]
-      // 我們在前端可以將它轉換為 ['10:00', '13:30'] 這種純時間字串供月曆按鈕顯示
-      const pureTimes = data.map(slot => {
-        const date = new Date(slot.start_time);
-        return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
-      });
-      
+      const serviceIds = (selectedServices || []).map(s => s.id);
+      const addonIds = (selectedAddons || []).map(a => a.id);
+
+      // 1. 呼叫 API (對齊參數順序: providerId, serviceIds, dateString, addonIds)
+      const res = await bookingService.getAvailableSlots(providerId, serviceIds, dateString, addonIds);
+
+      // 💡 2. 萬能相容：如果 http.js 已經解包，res 就是陣列；如果沒解包，資料在 res.data 裡
+      const rawSlots = Array.isArray(res)
+        ? res
+        : (Array.isArray(res?.data) ? res.data : []);
+
+      // 💡 3. 時間格式轉換："2026-07-29T10:00:00+08:00" ➔ "10:00"
+      const pureTimes = rawSlots
+        .map(slot => (slot?.start_time ? slot.start_time.substring(11, 16) : null))
+        .filter(Boolean);
+
       setAvailableSlots(pureTimes);
     } catch (err) {
+      console.error('❌ 時段撈取發生錯誤:', err);
       setError('無法撈取該日期的可用時段，請更換日期試試');
       setAvailableSlots([]);
     } finally {
       setIsSlotsLoading(false);
     }
-  }, []);
+  }, [selectedServices, selectedAddons]);
 
-  const submitBooking = async (startTime, customerData) => {
+  // ==========================================
+  // 6. 最終決策：提交最終總訂單給 Django
+  // ==========================================
+  const submitBooking = async (startTime) => {
     setIsLoading(true);
     setError(null);
     try {
+      const serviceIds = selectedServices.map(s => s.id);
+      const addonIds = selectedAddons.map(a => a.id);
+
       const payload = {
         provider_id: selectedProvider.id,
-        service_id: selectedService.id,
-        customer_id: 1, // 測試階段先寫死，未來整合 LINE 登入後帶入真實顧客 ID
+        service_ids: serviceIds, // 💡 核心變革 5：改為帶入 service_ids 陣列
+        addon_ids: addonIds,
+        customer_id: 1,          // 整合 LINE 登入前先寫死
         start_time: startTime,
-        memo: `[聯絡資訊]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n\n[客人備註]\n${customerData.memo || '無'}`
+        memo: `[客戶聯絡資料]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n生日: ${customerData.birthday || '未填'}\n\n[客人客製備註]\n${customerData.memo || '無'}`
       };
-      
+
       await bookingService.createAppointment(payload);
-      setStep(5); // 進入步驟 5：預約成功畫面
+      setStep(6);
       return true;
     } catch (err) {
-      const errorMsg = err.response?.data?.start_time || '預約失敗，請確認時段是否被搶走';
+      const errorMsg = err.response?.data?.start_time || err.response?.data?.service_ids || '預約失敗，這個時段剛剛被別人搶先一步劃走了！';
       setError(errorMsg);
       return false;
     } finally {
@@ -102,26 +194,37 @@ export const useBookingFlow = () => {
 
   const resetFlow = () => {
     setStep(1);
+    setCustomerData({ name: '', phone: '', email: '', birthday: '', memo: '' });
     setSelectedProvider(null);
-    setSelectedService(null);
-    setAvailableSlots([]); // 💡 重設流程時清空時間
+    setSelectedServices([]);
+    setSelectedAddons([]);
+    setAvailableSlots([]);
     setError(null);
   };
 
-  // 將所有 UI 需要的變數和方法打包丟出去
+  // ==========================================
+  // 7. 將大腦全數對外釋放解構
+  // ==========================================
   return {
     providers,
+    services,
     isLoading,
     error,
     step,
     setStep,
+    customerData,
     selectedProvider,
-    selectedService,
-    availableSlots,     // 💡 釋放給 BookingPage.jsx 渲染時間按鈕
-    isSlotsLoading,     // 💡 釋放給 BookingPage.jsx 顯示時段的小圈圈 Loading
-    fetchAvailableSlots,// 💡 釋放給 BookingPage.jsx 的 useEffect 監聽呼叫
+    selectedServices,             // 💡 釋放多選主服務陣列
+    selectedAddons,
+    availableSlots,
+    isSlotsLoading,
+    fetchAvailableSlots,
+    submitCustomerData,
     selectProvider,
-    selectService,
+    toggleService,                // 💡 釋放步驟 3 的勾選切換函式
+    confirmServicesAndGoToAddons, // 💡 釋放步驟 3 的下一步確認按鈕函式
+    toggleAddon,
+    confirmAddonsAndGoToCalendar,
     submitBooking,
     resetFlow,
     goBack,

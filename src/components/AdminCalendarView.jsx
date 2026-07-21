@@ -1,14 +1,17 @@
 // src/components/AdminCalendarView.jsx
 import React, { useState, useEffect } from 'react';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
+import AppointmentEditModal from './AppointmentEditModal'; 
 
 const AdminCalendarView = () => {
   const {
     stats, appointments, loading, weekDays,
-    selectedAppointment, setSelectedAppointment, navigateWeek
+    selectedAppointment, setSelectedAppointment, navigateWeek,
+    refreshData
   } = useAdminDashboard();
 
   const [activeMobileDayIdx, setActiveMobileDayIdx] = useState(0);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (weekDays && weekDays.length > 0) {
@@ -24,10 +27,38 @@ const AdminCalendarView = () => {
     return appointments.filter(app => app.start_time.startsWith(dateStr));
   };
 
+  const renderStatusBadge = (status) => {
+    const mapping = {
+      'CONFIRMED': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      'PENDING': 'bg-amber-50 text-amber-600 border-amber-100',
+      'COMPLETED': 'bg-blue-50 text-blue-600 border-blue-100',
+      'CANCELLED': 'bg-gray-50 text-gray-400 border-gray-100',
+    };
+    const labelMapping = { 'CONFIRMED': '已確認', 'PENDING': '待確認', 'COMPLETED': '已完成', 'CANCELLED': '已取消' };
+    return (
+      <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-md font-bold border ${mapping[status] || mapping['PENDING']}`}>
+        {labelMapping[status] || '待確認'}
+      </span>
+    );
+  };
+
+  // 💡 在抽屜點選渲染前先動態計算選中項目的「總時長」與「總定價」
+  // 總時長（所有主服務 + 所有加購）
+const totalDuration = selectedAppointment
+  ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) + 
+    (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
+  : 0;
+
+// 系統預設總價（所有主服務 + 所有加購）
+const systemTotal = selectedAppointment
+  ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) + 
+    (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
+  : 0;
+
   if (loading && weekDays.length === 0) return <div className="text-center py-20 text-sm text-gray-400">行事曆同步中...</div>;
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in text-left">
       {/* ================= 1. 內頁週切換控制項 ================= */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
@@ -44,7 +75,7 @@ const AdminCalendarView = () => {
 
       {/* ================= 2. 營收指標列 ================= */}
       {stats && (
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5 mb-6 text-left">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5 mb-6">
           <div className="bg-[#f4f1eb] border border-[#e8e3d9] p-4 md:p-6 rounded-2xl">
             <p className="text-[10px] md:text-xs font-bold text-gray-400 tracking-wider uppercase">今日營收 / 本月營業額</p>
             <div className="flex items-baseline space-x-2 mt-1 md:mt-2">
@@ -68,7 +99,7 @@ const AdminCalendarView = () => {
       {/* ================= 3. 主工作區 ================= */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-        {/* 左側：週曆核心 */}
+        {/* 左側：週曆核心網格 */}
         <div className="flex-1 w-full bg-white border border-gray-100 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-sm">
 
           {/* 📱 手機版 7 天頁籤 */}
@@ -92,7 +123,7 @@ const AdminCalendarView = () => {
             })}
           </div>
 
-          {/* 💻/📱 行事曆柵格容器 */}
+          {/* 💻/📱 行事曆網格 */}
           <div className="block md:grid md:grid-cols-7 md:gap-4">
             {weekDays.map((day, idx) => {
               const dayApps = getAppointmentsForDay(day);
@@ -113,22 +144,34 @@ const AdminCalendarView = () => {
                   </div>
 
                   <div className="flex-1 space-y-2 md:overflow-y-auto md:max-h-[400px] pr-0 md:pr-1">
-                    {dayApps.map(app => (
-                      <div
-                        key={app.id}
-                        onClick={() => setSelectedAppointment(app)}
-                        className={`p-3.5 md:p-3 rounded-xl border cursor-pointer transition-all active:scale-95 text-left ${selectedAppointment?.id === app.id ? 'bg-[#cdbfa8] border-[#bcae97] text-white shadow-md' : 'bg-white border-gray-100 hover:border-amber-200 shadow-sm'}`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <p className="text-sm md:text-xs font-black truncate max-w-[120px] md:max-w-[70px]">{app.customer.name}</p>
-                          <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase ${app.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'} ${selectedAppointment?.id === app.id ? '!bg-white/20 !text-white' : ''}`}>
-                            {app.status === 'CONFIRMED' ? '已確認' : '待確認'}
-                          </span>
+                    {dayApps.map(app => {
+                      const isCurrentSelected = selectedAppointment?.id === app.id;
+                      return (
+                        <div
+                          key={app.id}
+                          onClick={() => setSelectedAppointment(app)}
+                          className={`p-3.5 md:p-3 rounded-xl border cursor-pointer transition-all active:scale-95 text-left 
+                            ${isCurrentSelected ? 'bg-[#cdbfa8] border-[#bcae97] text-white shadow-md' : 'bg-white border-gray-100 hover:border-amber-200 shadow-sm'}`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <p className="text-sm md:text-xs font-black truncate max-w-[120px] md:max-w-[70px]">{app.customer?.name || app.customer_name}</p>
+                            <div className={isCurrentSelected ? '!bg-white/10 rounded-md text-white' : ''}>
+                              {renderStatusBadge(app.status)}
+                            </div>
+                          </div>
+                          <p className={`text-xs md:text-[11px] font-mono font-medium tracking-wide ${isCurrentSelected ? 'text-amber-50' : 'text-gray-400'}`}>
+                            ⏱ {app.start_time.substring(11, 16)}
+                          </p>
+                          <p className="text-sm md:text-xs font-bold truncate mt-1">{app.service?.name || app.service_name}</p>
+                          
+                          {app.addons && app.addons.length > 0 && (
+                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded mt-1 inline-block ${isCurrentSelected ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-700'}`}>
+                              ＋{app.addons.length} 加購
+                            </span>
+                          )}
                         </div>
-                        <p className={`text-xs md:text-[11px] font-medium tracking-wide truncate ${selectedAppointment?.id === app.id ? 'text-amber-50' : 'text-gray-400'}`}>⏱ {app.start_time.substring(11, 16)}</p>
-                        <p className="text-sm md:text-xs font-bold truncate mt-1">{app.service.name}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {dayApps.length === 0 && (
                       <div className="flex flex-col items-center justify-center h-40 md:h-32 text-gray-300 text-xs md:text-[11px] font-medium">🎉 這天完全空檔</div>
                     )}
@@ -139,68 +182,80 @@ const AdminCalendarView = () => {
           </div>
         </div>
 
-        {/* 右側 / 手機浮出：詳情面板 */}
+        {/* 右側 / 手機浮出：精簡唯讀摘要面板 */}
         {selectedAppointment && (
-          /* 
-            💡 關鍵修正點：將原先的 z-50 升級為 z-[60] 
-            這樣抽屜白底本體就會完美騎在底部導覽列（z-50）的上方，按鈕重見天日！
-          */
           <div className="fixed inset-0 bg-black/40 z-[60] flex items-end justify-center animate-fade-in lg:static lg:bg-transparent lg:z-auto lg:flex-initial lg:w-80 lg:shrink-0">
-
-            {/* 手機版點擊灰色遮罩區自動關閉詳情 */}
             <div className="absolute inset-0 lg:hidden" onClick={() => setSelectedAppointment(null)} />
 
-            {/* 實際抽屜白底本體 */}
-            {/* 💡 視覺細節優化：在手機版底端追加 pb-10（Padding-Bottom），防止無邊框手機（如 iPhone FaceID 系列）底部的黑條安全區去撞到按鈕 */}
-            <div className="relative w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-3xl p-6 pb-10 lg:pb-6 shadow-2xl transition-all duration-300 lg:w-full lg:max-h-none lg:rounded-3xl lg:border lg:border-gray-100 lg:shadow-sm lg:sticky lg:top-24 text-left">
-
-              {/* 手機版頂部小拉條裝飾 */}
+            <div className="relative w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-3xl p-6 pb-10 lg:pb-6 shadow-2xl transition-all duration-300 lg:w-full lg:max-h-none lg:rounded-3xl lg:border lg:border-gray-100 lg:shadow-sm lg:sticky lg:top-24">
               <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-4 lg:hidden" />
 
               <div className="flex justify-between items-start border-b border-gray-50 pb-4 mb-4">
                 <div>
                   <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-md">單號 #{selectedAppointment.id}</span>
-                  <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer.name}</h3>
+                  <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer?.name || selectedAppointment.customer_name}</h3>
                 </div>
-
-                <button
-                  onClick={() => setSelectedAppointment(null)}
-                  className="p-2 -mr-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full lg:hidden font-bold"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setSelectedAppointment(null)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full lg:hidden font-bold">✕</button>
               </div>
 
-              {/* 中間主要資訊 (不變) */}
               <div className="space-y-4 text-sm">
+                <div className="flex justify-between items-center bg-gray-50 p-2.5 px-3 rounded-xl border border-gray-100/50">
+                  <span className="text-xs text-gray-400 font-bold">預約狀態</span>
+                  {renderStatusBadge(selectedAppointment.status)}
+                </div>
+
                 <div>
                   <label className="text-xs text-gray-400 block font-medium">聯絡電話</label>
-                  <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.customer.phone}</p>
+                  <p className="font-bold text-gray-700 mt-0.5 font-mono">{selectedAppointment.customer?.phone || selectedAppointment.customer_phone || '無資料'}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50">
-                  <label className="text-xs text-gray-400 block font-medium">預約項目</label>
-                  <p className="font-black text-gray-800 text-base mt-0.5">{selectedAppointment.service.name}</p>
-                  <div className="flex justify-between items-center mt-3 text-xs text-gray-500 pt-2 border-t border-gray-200/50">
-                    <span>⏱ {selectedAppointment.service.duration_minutes} 分鐘</span>
-                    <span className="font-black text-amber-700 text-sm">NT$ {selectedAppointment.service.price}</span>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
+                  <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
+                  <p className="font-black text-gray-800 text-base">{selectedAppointment.service?.name || selectedAppointment.service_name}</p>
+                  
+                  {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
+                    <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2 rounded-lg space-y-0.5">
+                      {selectedAppointment.addons.map(a => <p key={a.id}>＋ {a.name} (NT$ {a.price})</p>)}
+                    </div>
+                  )}
+
+                  {/* 💡 核心優化：將原先錯位的文案一拆為二，清晰展示總時長與對帳金額 */}
+                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200/50">
+                    <span>⏱ 總計施作時長</span>
+                    <span className="font-bold text-gray-700 font-mono">{totalDuration} 分鐘</span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                    <span>💰 實收 / 預估收費</span>
+                    <span className="font-black text-amber-900 text-sm font-mono">
+                      {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined 
+                        ? `實收 NT$ ${selectedAppointment.final_price}` 
+                        : `預估 NT$ ${systemTotal}`}
+                    </span>
                   </div>
                 </div>
+
                 <div>
                   <label className="text-xs text-gray-400 block font-medium">擔當美甲師</label>
                   <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name || '未指定'}</p>
                 </div>
+                
                 <div>
-                  <label className="text-xs text-gray-400 block font-medium">預約備註</label>
+                  <label className="text-xs text-gray-400 block font-medium">客戶留言與備註</label>
                   <p className="text-xs text-gray-500 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl mt-1 leading-relaxed border border-gray-100/30">
                     {selectedAppointment.memo || '無備註描述'}
                   </p>
                 </div>
               </div>
 
-              {/* 狀態切換按鈕組：現在這裡會完美浮在導覽列上方，超級好按！ */}
-              <div className="grid grid-cols-2 gap-2 mt-6 pt-4 border-t border-gray-50">
-                <button className="py-3 lg:py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-emerald-700 transition-all active:scale-95">標記完成</button>
-                <button className="py-3 lg:py-2.5 border border-red-100 text-red-500 font-bold text-xs rounded-xl hover:bg-red-50 transition-all active:scale-95">標記未到</button>
+              <div className="mt-6 pt-4 border-t border-gray-50">
+                <button 
+                  type="button"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center block pt-4"
+                >
+                  ⚡ 開啟聯合編輯 / 現場結帳 ➔
+                </button>
               </div>
             </div>
           </div>
@@ -211,6 +266,19 @@ const AdminCalendarView = () => {
         )}
 
       </div>
+
+      {/* ==========================================
+        📦 共享模組：短路邏輯條件加載 (瓦解編譯器 Bug)
+        ========================================== */}
+      {isEditModalOpen && (
+        <AppointmentEditModal
+          isOpen={true}
+          appointment={selectedAppointment}
+          onClose={() => setIsEditModalOpen(false)}
+          onRefresh={refreshData}
+        />
+      )}
+
     </div>
   );
 };
