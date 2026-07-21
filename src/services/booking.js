@@ -7,13 +7,18 @@ export const bookingService = {
    * 對應 Django: GET /api/providers/
    */
   getProviders: () => http.get('providers/'),
-  
-  getAvailableSlots: async (providerId, serviceId, date) => {
-    // 發送 GET 請求到：/api/providers/{id}/available_slots/?date=2026-07-18&service_id=2
+
+  getServicesByProvider: async (providerId) => {
+    return http.get(`providers/${providerId}/services/`);
+  },
+
+  // src/services/booking.js 內部的可用時段對接
+  getAvailableSlots: (providerId, serviceIds, date, addonIds = []) => {
     return http.get(`providers/${providerId}/available_slots/`, {
       params: {
         date: date,
-        service_id: serviceId
+        'service_ids[]': serviceIds, // 傳送多選主服務 ID 陣列
+        'addon_ids[]': addonIds      // 傳送多選加購項 ID 陣列
       }
     });
   },
