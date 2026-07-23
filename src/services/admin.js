@@ -1,16 +1,20 @@
 // src/services/admin.js
 import http from '../utils/http';
 
+/**
+ * 業主後台管理核心 API 服務模組
+ */
 export const adminService = {
-  // ==========================================
-  // 1. 營運看板與行事曆區塊
-  // ==========================================
-  
+  // =========================================================================
+  // 1. 營運看板與行事曆 (Dashboard & Calendar)
+  // =========================================================================
+
   /**
    * 取得指定日期區間內的行事曆預約資料
-   * @param {string} startDate - 格式：'YYYY-MM-DD'
-   * @param {string} endDate - 格式：'YYYY-MM-DD'
+   * @param {string} startDate - 開始日期 (格式：'YYYY-MM-DD')
+   * @param {string} endDate - 結束日期 (格式：'YYYY-MM-DD')
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Array>} 預約卡片清單
    */
   getCalendarAppointments: (startDate, endDate, shopId = 1) => {
     return http.get('admin/calendar/', {
@@ -19,8 +23,9 @@ export const adminService = {
   },
 
   /**
-   * 取得今日/本週/本月營收與看盤指標
+   * 取得今日/本週/本月營收與看盤關鍵指標 (KPI Stats)
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Object>} 營收統計數據物件
    */
   getDashboardStats: (shopId = 1) => {
     return http.get('admin/stats/', {
@@ -28,27 +33,82 @@ export const adminService = {
     });
   },
 
-  // ==========================================
-  // 2. 基礎建設：服務品項管理 (ServiceItem CRUD)
-  // ==========================================
+  // =========================================================================
+  // 2. 預約單與施作紀錄管理 (Appointments & Records)
+  // =========================================================================
 
-  // 💡 1. 撈取全店的預約單列表（包含巢狀的施作紀錄）
-  getAppointmentsWithRecords: async (shopId = 1) => {
+  /**
+   * 撈取全店的預約單列表（包含巢狀的 1:1 施作紀錄、美甲師、顧客資料）
+   * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Array>} 預約單與施作紀錄綜合清單
+   */
+  getAppointmentsWithRecords: (shopId = 1) => {
     return http.get('admin/appointments-records/', {
       params: { shop_id: shopId }
     });
   },
 
-  // 💡 2. 聯合更新 API（同時修改預約狀態與 1:1 的施作紀錄）
-  updateAppointmentWithRecord: async (appointmentId, data, shopId = 1) => {
+  /**
+   * 聯合更新預約單狀態與施作紀錄 (色號、款式說明、成果照片網址等)
+   * @param {number} appointmentId - 預約單 ID
+   * @param {Object} data - 更新內容 (例如：{ status: 'CONFIRMED', record: { color_code: 'P-24' } })
+   * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Object>} 更新後的預約紀錄物件
+   */
+  updateAppointmentWithRecord: (appointmentId, data, shopId = 1) => {
     return http.put(`admin/appointments-records/${appointmentId}/`, data, {
       params: { shop_id: shopId }
     });
   },
 
+  // =========================================================================
+  // 3. 美甲師/服務人員管理 (Provider CRUD)
+  // =========================================================================
+
   /**
-   * 取得該店家所有服務品項列表
+   * 取得全店所有美甲師/服務人員名冊
+   * @returns {Promise<Array>} 美甲師物件列表
+   */
+  getProviders: () => {
+    return http.get('providers/');
+  },
+
+  /**
+   * 新增美甲師/服務人員
+   * @param {Object} data - { name: 'Zoe', is_manager: false, shop_id: 1 }
+   * @returns {Promise<Object>} 新增成功的美甲師物件
+   */
+  createProvider: (data) => {
+    return http.post('providers/', data);
+  },
+
+  /**
+   * 編輯美甲師/服務人員資料 (名稱、是否升任店長等)
+   * @param {number} id - 美甲師 ID
+   * @param {Object} data - 要修改的欄位資料
+   * @returns {Promise<Object>} 更新後的美甲師物件
+   */
+  updateProvider: (id, data) => {
+    return http.patch(`providers/${id}/`, data);
+  },
+
+  /**
+   * 刪除/編制下架美甲師
+   * @param {number} id - 美甲師 ID
+   * @returns {Promise<void>}
+   */
+  deleteProvider: (id) => {
+    return http.delete(`providers/${id}/`);
+  },
+
+  // =========================================================================
+  // 4. 服務品項與菜單管理 (ServiceItem CRUD & Options)
+  // =========================================================================
+
+  /**
+   * 取得該店家所有服務品項列表 (主服務 + 加購項)
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Array>} 服務品項清單
    */
   getServices: (shopId = 1) => {
     return http.get('admin/services/', {
@@ -58,8 +118,9 @@ export const adminService = {
 
   /**
    * 上架新服務品項
-   * @param {Object} data - { name, price, duration_minutes, description, provider_ids: [1, 2] }
+   * @param {Object} data - { name, price, duration_minutes, description, is_addon, provider_ids: [1, 2] }
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Object>} 新建成功的服務品項物件
    */
   createService: (data, shopId = 1) => {
     return http.post('admin/services/', data, {
@@ -68,10 +129,11 @@ export const adminService = {
   },
 
   /**
-   * 修改服務品項參數
+   * 修改服務品項參數 (名稱、價格、工時、綁定人員)
    * @param {number} id - 服務品項 ID
    * @param {Object} data - 更新的欄位資料
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Object>} 更新後的服務品項物件
    */
   updateService: (id, data, shopId = 1) => {
     return http.put(`admin/services/${id}/`, data, {
@@ -82,19 +144,20 @@ export const adminService = {
   /**
    * 下架/刪除服務品項
    * @param {number} id - 服務品項 ID
+   * @returns {Promise<void>}
    */
   deleteService: (id) => {
     return http.delete(`admin/services/${id}/`);
   },
 
   /**
-   * 💡 撈取多對多勾選清單：取得目前店家旗下所有的美甲師輕量清單 (ID 與姓名)
-   * URL 對接 Django 的 @action(url_path='provider_options')
+   * 撈取選單專用的美甲師輕量選項清單 (僅包含 id, name，供服務上架時多選勾選綁定)
    * @param {number} [shopId=1] - 店家 ID
+   * @returns {Promise<Array>} 簡化版美甲師清單 [{ id: 1, name: 'Zoe' }]
    */
   getProviderOptions: (shopId = 1) => {
     return http.get('admin/services/provider_options/', {
       params: { shop_id: shopId }
     });
-  }
+  },
 };
