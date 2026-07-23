@@ -17,7 +17,8 @@ export const useAppointmentManagement = () => {
     setError(null);
     try {
       const data = await adminService.getAppointmentsWithRecords(shopId);
-      setAppointments(data);
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setAppointments(list);
     } catch (err) {
       setError('無法載入預約與施作紀錄，請確認後端連線。');
     } finally {
@@ -29,21 +30,8 @@ export const useAppointmentManagement = () => {
     loadAppointments();
   }, [loadAppointments]);
 
-  // 開啟編輯彈窗（💡 對齊 Django 的 1:1 欄位名稱防鎖死保底）
   const openEditModal = (app) => {
-    setEditingApp({
-      id: app.id,
-      start_time: app.start_time || '',
-      status: app.status || 'PENDING',
-      customer_name: app.customer?.name || app.customer_name || '未知顧客',
-      service_name: app.service?.name || app.service_name || '未知項目',
-      // 💡 核心防護：如果後端當前沒有這筆紀錄，前端自動生出空結構保底，防止打字鎖死
-      record: {
-        id: app.record?.id || null,
-        materials_note: app.record?.materials_note || '',
-        image_url: app.record?.image_url || ''
-      }
-    });
+    setEditingApp(app);
   };
 
   // 處理表單欄位變更（支援第一層與巢狀 record 層）

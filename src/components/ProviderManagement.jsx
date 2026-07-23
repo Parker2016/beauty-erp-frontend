@@ -1,13 +1,14 @@
 // src/components/ProviderManagement.jsx
 import React, { useState, useEffect } from 'react';
-import { bookingService } from '../services/booking'; // 沿用原本的 Service
+import { adminService } from '../services/admin';
 
 const ProviderManagement = () => {
   // ==========================================
-  // 1. 狀態宣告 (對齊 Django Model 的屬性)
+  // 1. 狀態宣告
   // ==========================================
   const [providers, setProviders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // 表單專用狀態
@@ -17,15 +18,15 @@ const ProviderManagement = () => {
     is_manager: false
   });
 
-  // 模擬載入資料 (未來直接對接後端 CRUD API)
   const loadProviders = async () => {
     setIsLoading(true);
     try {
-      // 初期先沿用客人的 getProviders，未來後台可改為專屬的 adminService.getProviders()
-      const data = await bookingService.getProviders();
-      setProviders(data);
+      const data = await adminService.getProviders();
+      // 相容性解包防禦
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setProviders(list);
     } catch (err) {
-      alert('無法取得人員名單');
+      alert('無法取得人員名單，請確認網絡或帳號權限。');
     } finally {
       setIsLoading(false);
     }
@@ -36,7 +37,7 @@ const ProviderManagement = () => {
   }, []);
 
   // ==========================================
-  // 2. 表單與 Modal 操作邏輯
+  // 2. 表單與 Modal 操作邏輯 (全數改為 API 串接)
   // ==========================================
   const openAddModal = () => {
     setEditingId(null);
@@ -50,30 +51,45 @@ const ProviderManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e) => {
+  // 💡 核心修正：儲存時向 Django 發送 POST 或 PATCH API
+  const handleSaveSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
-    if (editingId) {
-      // 【編輯邏輯】更新本地狀態 (未來在此串接 axios.put)
-      setProviders(prev => prev.map(p => p.id === editingId ? { ...p, ...formData } : p));
-    } else {
-      // 【新增邏輯】模擬生成新人員 (未來在此串接 axios.post)
-      const newProvider = {
-        id: Date.now(),
-        shop_id: 1,
-        ...formData,
-        services: [] // 剛上架的人員先預設沒有綁定任何服務
-      };
-      setProviders(prev => [...prev, newProvider]);
+    setIsSubmitting(true);
+    try {
+      if (editingId) {
+        // 【編輯邏輯】PATCH API 到 Django 後端
+        await adminService.updateProvider(editingId, formData);
+      } else {
+        // 【新增邏輯】POST API 到 Django 後端
+        const payload = {
+          shop_id: 1, // 預設店鋪 ID
+          ...formData
+        };
+        await adminService.createProvider(payload);
+      }
+      
+      setIsModalOpen(false);
+      await loadProviders(); // 成功後向伺服器重撈最新資料，確保全域資料對齊！
+    } catch (err) {
+      const errorDetail = err.response?.data?.detail || err.response?.data?.name?.[0] || '儲存失敗，請再試一次。';
+      alert(`操作失敗: ${errorDetail}`);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id) => {
+  // 💡 核心修正：刪除時向 Django 發送 DELETE API
+  const handleDelete = async (id) => {
     if (window.confirm('確定要刪除這位服務人員嗎？這將會連帶取消他所有的排班。')) {
-      // 未來在此串接 axios.delete
-      setProviders(prev => prev.filter(p => p.id !== id));
+      try {
+        await adminService.deleteProvider(id);
+        // 成功後向伺服器重新載入列表
+        await loadProviders();
+      } catch (err) {
+        alert(err.response?.data?.detail || '刪除失敗，該人員可能尚有綁定的預約紀錄。');
+      }
     }
   };
 
@@ -88,7 +104,6 @@ const ProviderManagement = () => {
         </div>
         <button
           onClick={openAddModal}
-          /* bg-gray-900 hover:bg-gray-800: 你專案特有的現代洗鍊文青黑調風格 */
           className="px-4 py-2.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-gray-800 transition-all active:scale-95"
         >
           ＋ 新增服務人員
@@ -96,13 +111,8 @@ const ProviderManagement = () => {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-sm text-gray-400 font-medium">資料載入中...</div>
+        <div className="text-center py-12 text-sm text-gray-400 font-medium animate-pulse">資料同步中...</div>
       ) : (
-        /* 
-          📱/💻 列表響應式佈局：
-          grid-cols-1: 手機版單卡垂直排列
-          sm:grid-cols-2 lg:grid-cols-3: 隨著螢幕變大，自動舒展成兩欄或三欄網格 (等同 Antd 的 Row/Col 佈局)
-        */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {providers.map((p) => (
             <div 
@@ -130,7 +140,7 @@ const ProviderManagement = () => {
                 </div>
               </div>
 
-              {/* 卡片底部按鈕區 (等同 Antd Card 的 actions 屬性) */}
+              {/* 卡片底部按鈕區 */}
               <div className="flex justify-end space-x-2 pt-3 border-t border-gray-50 text-xs">
                 <button 
                   onClick={() => openEditModal(p)}
@@ -151,12 +161,11 @@ const ProviderManagement = () => {
       )}
 
       {/* ==========================================
-        📦 3. 媲美 Antd Modal 的 100% 自刻增刪改彈窗
+        📦 3. 增刪改彈窗
         ========================================== */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
-          {/* 點擊背景防呆關閉 */}
-          <div className="absolute inset-0" onClick={() => setIsModalOpen(false)} />
+          <div className="absolute inset-0" onClick={() => !isSubmitting && setIsModalOpen(false)} />
 
           <form 
             onSubmit={handleSaveSubmit}
@@ -180,22 +189,19 @@ const ProviderManagement = () => {
                 />
               </div>
 
-              {/* 欄位 2：職等權限 (💡 純 Tailwind 打造極美 iOS 風格 Switch 替代 Antd!) */}
+              {/* 欄位 2：職等權限 Switch */}
               <div className="flex justify-between items-center bg-gray-50 p-3.5 rounded-xl border border-gray-100/50">
                 <div>
                   <label className="text-xs font-bold text-gray-700 block">升任店長權限</label>
                   <p className="text-[11px] text-gray-400 mt-0.5">店長帳號未來擁有檢視全店營業額的權限</p>
                 </div>
                 
-                {/* Switch 本體點擊區 */}
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, is_manager: !prev.is_manager }))}
-                  /* w-11 h-6: 嚴格對齊 iOS 開關比例，根據選中狀態動態控制 bg- 顏色 */
                   className={`w-11 h-6 rounded-full relative transition-colors duration-300 focus:outline-none
                     ${formData.is_manager ? 'bg-amber-600' : 'bg-gray-200'}`}
                 >
-                  {/* 內部的圓形白色滾珠：利用 translate-x 動態產生滑動感動畫 */}
                   <div 
                     className={`w-5 h-5 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm transition-transform duration-300
                       ${formData.is_manager ? 'translate-x-5' : 'translate-x-0'}`}
@@ -208,16 +214,18 @@ const ProviderManagement = () => {
             <div className="flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-50 text-xs font-bold">
               <button 
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2.5 border border-gray-100 text-gray-400 rounded-xl hover:bg-gray-50"
+                className="px-4 py-2.5 border border-gray-100 text-gray-400 rounded-xl hover:bg-gray-50 disabled:opacity-50"
               >
                 取消
               </button>
               <button 
                 type="submit"
-                className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 shadow-sm"
+                disabled={isSubmitting}
+                className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 shadow-sm disabled:bg-gray-400"
               >
-                儲存配置
+                {isSubmitting ? '同步至雲端中...' : '儲存配置'}
               </button>
             </div>
           </form>

@@ -64,7 +64,7 @@ const AppointmentWithRecordEditor = () => {
                         : (app.service_name || '無指定項目')}
                     </span>
 
-                    {/* 加購項目標籤 (保持不變) */}
+                    {/* 加購項目標籤 */}
                     {app.addons && app.addons.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {app.addons.map(addon => (
@@ -102,12 +102,20 @@ const AppointmentWithRecordEditor = () => {
       </div>
 
       {/* ==========================================
-        📱 情況 B：手機版專屬高質感卡片清單 (電腦版 md:hidden)
+        📱 情況 B：手機版專屬高質感卡片清單 (同步對齊多選 services)
         ========================================== */}
       <div className="block md:hidden space-y-3">
         {appointments.map(app => {
-          // 💡 核心優化：手機版同步動態推導系統基準總價
-          const systemTotal = (app.service?.price || 0) + (app.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0);
+          // 💡 1. 手機版同步升級：計算所有主服務 ＋ 加購項目的基底總價
+          const systemTotal =
+            (app.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
+            (app.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0);
+
+          // 💡 2. 手機版同步升級：主服務多選名稱串接
+          const serviceNames =
+            app.services && app.services.length > 0
+              ? app.services.map(s => s.name).join(' ＋ ')
+              : (app.service_name || '無指定項目');
 
           return (
             <div key={app.id} className="p-4 bg-white border border-gray-100 rounded-xl shadow-sm text-left flex flex-col justify-between">
@@ -121,16 +129,19 @@ const AppointmentWithRecordEditor = () => {
 
               <div className="text-xs text-gray-500 space-y-1.5 mb-3">
                 <div>
-                  <p className="font-medium text-gray-700">💅 項目：{app.service?.name || app.service_name}</p>
+                  {/* 顯示主服務多選結果 */}
+                  <p className="font-bold text-gray-800">💅 項目：{serviceNames}</p>
+                  
+                  {/* 加購項目標籤 */}
                   {app.addons && app.addons.length > 0 && (
-                    <p className="text-[11px] text-amber-700 font-bold pl-5">
+                    <p className="text-[11px] text-amber-700 font-bold pl-5 mt-0.5">
                       加購：{app.addons.map(a => a.name).join(', ')}
                     </p>
                   )}
                 </div>
                 <p className="font-mono">⏱ 時間：{app.start_time?.replace('T', ' ').substring(0, 16)}</p>
                 <p className="font-bold text-amber-900">
-                  💰 實收：{app.final_price !== null && app.final_price !== undefined ? `NT$ ${app.final_price}` : `NT$ ${systemTotal} (基底定價)`}
+                  💰 實收：{app.final_price !== null && app.final_price !== undefined ? `NT$ ${app.final_price} (實收)` : `NT$ ${systemTotal} (基底定價)`}
                 </p>
                 <p className="truncate text-gray-400">🎨 紀錄：{app.record?.materials_note || '（目前無凝膠色號紀錄）'}</p>
               </div>

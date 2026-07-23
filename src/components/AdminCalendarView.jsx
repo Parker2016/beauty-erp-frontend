@@ -1,7 +1,7 @@
 // src/components/AdminCalendarView.jsx
 import React, { useState, useEffect } from 'react';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
-import AppointmentEditModal from './AppointmentEditModal'; 
+import AppointmentEditModal from './AppointmentEditModal';
 
 const AdminCalendarView = () => {
   const {
@@ -21,9 +21,14 @@ const AdminCalendarView = () => {
     }
   }, [weekDays]);
 
+  // 💡 1. 核心修復：使用本地時間格式化 YYYY-MM-DD，瓦解 UTC 時區導致日期少一天的 Bug
   const getAppointmentsForDay = (date) => {
     if (!date) return [];
-    const dateStr = date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
     return appointments.filter(app => app.start_time.startsWith(dateStr));
   };
 
@@ -42,18 +47,17 @@ const AdminCalendarView = () => {
     );
   };
 
-  // 💡 在抽屜點選渲染前先動態計算選中項目的「總時長」與「總定價」
   // 總時長（所有主服務 + 所有加購）
-const totalDuration = selectedAppointment
-  ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) + 
-    (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
-  : 0;
+  const totalDuration = selectedAppointment
+    ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) +
+      (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
+    : 0;
 
-// 系統預設總價（所有主服務 + 所有加購）
-const systemTotal = selectedAppointment
-  ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) + 
-    (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
-  : 0;
+  // 系統預設總價（所有主服務 + 所有加購）
+  const systemTotal = selectedAppointment
+    ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
+      (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
+    : 0;
 
   if (loading && weekDays.length === 0) return <div className="text-center py-20 text-sm text-gray-400">行事曆同步中...</div>;
 
@@ -162,8 +166,14 @@ const systemTotal = selectedAppointment
                           <p className={`text-xs md:text-[11px] font-mono font-medium tracking-wide ${isCurrentSelected ? 'text-amber-50' : 'text-gray-400'}`}>
                             ⏱ {app.start_time.substring(11, 16)}
                           </p>
-                          <p className="text-sm md:text-xs font-bold truncate mt-1">{app.service?.name || app.service_name}</p>
-                          
+
+                          {/* 💡 2. 核心修復：週曆卡片支援多選服務名稱串接 */}
+                          <p className="text-sm md:text-xs font-bold truncate mt-1">
+                            {app.services && app.services.length > 0
+                              ? app.services.map(s => s.name).join(' ＋ ')
+                              : (app.service?.name || app.service_name || '無指定項目')}
+                          </p>
+
                           {app.addons && app.addons.length > 0 && (
                             <span className={`text-[9px] font-bold px-1 py-0.2 rounded mt-1 inline-block ${isCurrentSelected ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-700'}`}>
                               ＋{app.addons.length} 加購
@@ -211,15 +221,25 @@ const systemTotal = selectedAppointment
 
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
                   <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
-                  <p className="font-black text-gray-800 text-base">{selectedAppointment.service?.name || selectedAppointment.service_name}</p>
-                  
+                  {/* 主服務項目 */}
+                  <p className="font-black text-gray-800 text-base mb-2">
+                    {selectedAppointment.services && selectedAppointment.services.length > 0
+                      ? selectedAppointment.services.map(s => s.name).join(' ＋ ')
+                      : (selectedAppointment.service?.name || selectedAppointment.service_name || '未指定主服務')}
+                  </p>
+
+                  {/* 加購項目列表 */}
                   {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
-                    <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2 rounded-lg space-y-0.5">
-                      {selectedAppointment.addons.map(a => <p key={a.id}>＋ {a.name} (NT$ {a.price})</p>)}
+                    <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2.5 rounded-xl space-y-1 border border-amber-100/50">
+                      {selectedAppointment.addons.map(a => (
+                        <p key={a.id} className="flex justify-between items-center">
+                          <span>＋ {a.name}</span>
+                          <span className="text-amber-700 font-semibold">NT$ {a.price}</span>
+                        </p>
+                      ))}
                     </div>
                   )}
 
-                  {/* 💡 核心優化：將原先錯位的文案一拆為二，清晰展示總時長與對帳金額 */}
                   <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200/50">
                     <span>⏱ 總計施作時長</span>
                     <span className="font-bold text-gray-700 font-mono">{totalDuration} 分鐘</span>
@@ -228,8 +248,8 @@ const systemTotal = selectedAppointment
                   <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
                     <span>💰 實收 / 預估收費</span>
                     <span className="font-black text-amber-900 text-sm font-mono">
-                      {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined 
-                        ? `實收 NT$ ${selectedAppointment.final_price}` 
+                      {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined
+                        ? `實收 NT$ ${selectedAppointment.final_price}`
                         : `預估 NT$ ${systemTotal}`}
                     </span>
                   </div>
@@ -239,7 +259,7 @@ const systemTotal = selectedAppointment
                   <label className="text-xs text-gray-400 block font-medium">擔當美甲師</label>
                   <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name || '未指定'}</p>
                 </div>
-                
+
                 <div>
                   <label className="text-xs text-gray-400 block font-medium">客戶留言與備註</label>
                   <p className="text-xs text-gray-500 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl mt-1 leading-relaxed border border-gray-100/30">
@@ -249,10 +269,10 @@ const systemTotal = selectedAppointment
               </div>
 
               <div className="mt-6 pt-4 border-t border-gray-50">
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsEditModalOpen(true)}
-                  className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center block pt-4"
+                  className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center"
                 >
                   ⚡ 開啟聯合編輯 / 現場結帳 ➔
                 </button>
@@ -268,7 +288,7 @@ const systemTotal = selectedAppointment
       </div>
 
       {/* ==========================================
-        📦 共享模組：短路邏輯條件加載 (瓦解編譯器 Bug)
+        📦 共享模組：聯合編輯 Modal
         ========================================== */}
       {isEditModalOpen && (
         <AppointmentEditModal
