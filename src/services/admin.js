@@ -160,4 +160,28 @@ export const adminService = {
       params: { shop_id: shopId }
     });
   },
+
+  // =========================================================================
+  // 5. 美甲師排班管理 (Provider Shifts)
+  // =========================================================================
+
+  /**
+   * 取得指定條件的排班表清單 (支援依美甲師與日期區間過濾)
+   * 對應後端: GET /api/admin/shifts/?provider_id=1&start_date=2026-09-01&end_date=2026-09-30
+   * @param {Object} params - 查詢參數 { provider_id, start_date, end_date }
+   * @returns {Promise<Array>} 班表記錄清單
+   */
+  getShifts: (params = {}) => {
+    return http.get('admin/shifts/', { params });
+  },
+
+  /**
+   * 整月批次排班/覆蓋端點 (支援單一美甲師整月班表一次性寫入)
+   * 對應後端: POST /api/admin/shifts/batch/
+   * @param {Object} payload - { provider_id: 1, shifts: [{ date, start_time, end_time, is_off }] }
+   * @returns {Promise<Object>} 成功回應物件
+   */
+  batchSaveShifts: (payload) => {
+    return http.post('admin/shifts/batch/', payload);
+  },
 };
