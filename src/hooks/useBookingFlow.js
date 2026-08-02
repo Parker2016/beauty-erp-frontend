@@ -159,18 +159,24 @@ export const useBookingFlow = () => {
   // ==========================================
   // 6. 最終決策：提交最終總訂單給 Django
   // ==========================================
-  const submitBooking = async (startTime) => {
+  const submitBooking = async (startTime, liffUser) => {
     setIsLoading(true);
     setError(null);
     try {
       const serviceIds = selectedServices.map(s => s.id);
       const addonIds = selectedAddons.map(a => a.id);
 
+      // 💡 取得 LINE UID (若在 LINE LIFF 環境中可動態抓取，若無則預設或帶入暫存值)
+      const currentLineUid = window.liff?.getContext?.()?.userId || customerData.lineUid || `line_user_${Date.now()}`;
+
       const payload = {
         provider_id: selectedProvider.id,
-        service_ids: serviceIds, // 💡 核心變革 5：改為帶入 service_ids 陣列
+        service_ids: serviceIds,
         addon_ids: addonIds,
-        customer_id: 1,          // 整合 LINE 登入前先寫死
+        line_uid: liffUser.lineUid,
+        customer_name: customerData.name,         // 對應 customer_name
+        customer_phone: customerData.phone,       // 對應 customer_phone
+        customer_email: customerData.email || '', // 對應 customer_email (選填)
         start_time: startTime,
         memo: `[客戶聯絡資料]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n生日: ${customerData.birthday || '未填'}\n\n[客人客製備註]\n${customerData.memo || '無'}`
       };

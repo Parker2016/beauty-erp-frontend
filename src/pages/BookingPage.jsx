@@ -1,8 +1,10 @@
 // src/pages/BookingPage.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
+import { useLiffAuth } from '../hooks/useLiffAuth';
 
 const BookingPage = () => {
+  const { liffUser, isLiffLoading } = useLiffAuth();
   // ==========================================
   // 1. 從自訂 Hook 解構出全新的多選動態狀態與控制大腦
   // ==========================================
@@ -24,6 +26,12 @@ const BookingPage = () => {
     birthday: '', // 選填生日
     memo: ''
   });
+
+  useEffect(() => {
+    if (liffUser.name && !localForm.name) {
+      setLocalForm(prev => ({ ...prev, name: liffUser.name, email: liffUser.email || prev.email }));
+    }
+  }, [liffUser]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -108,7 +116,7 @@ const BookingPage = () => {
     const day = String(selectedDate.getDate()).padStart(2, '0');
     
     const startDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
-    await submitBooking(startDateTime);
+    await submitBooking(startDateTime, liffUser);
   };
 
   // 全螢幕同步 Loading 阻斷器
@@ -116,6 +124,15 @@ const BookingPage = () => {
     return <div className="min-h-screen flex justify-center items-center text-[#8c7654] font-bold bg-[#fcfbfa]">沙龍行事曆同步中...</div>;
   }
 
+  if (isLiffLoading) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center text-[#8c7654] font-bold bg-[#fcfbfa] space-y-3">
+        <div className="w-8 h-8 border-4 border-[#8c7654] border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xs">正在安全驗證您的 LINE 身分...</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
       
