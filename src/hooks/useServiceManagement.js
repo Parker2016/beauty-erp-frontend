@@ -159,6 +159,7 @@ export const useServiceManagement = () => {
     isModalOpen,
     setIsModalOpen,
     formData,
+    setFormData,
     editingService,
     openCreateModal,
     openEditModal,

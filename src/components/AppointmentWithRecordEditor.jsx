@@ -1,177 +1,172 @@
 // src/components/AppointmentWithRecordEditor.jsx
-import React, { useState } from 'react';
+import React from 'react';
+import { useAppointmentManagement } from '../hooks/useAppointmentManagement';
+import AppointmentEditModal from './AppointmentEditModal';
 
 const AppointmentWithRecordEditor = () => {
-  // 模擬從後端撈出來的複合式預約資料 (已自動 select_related / prefetch_related 了它的 service_record)
-  const [mockAppointments, setMockAppointments] = useState([
-    {
-      id: 101,
-      customer_name: '周曉彤',
-      service_name: '客製化手繪彩繪',
-      start_time: '2026-06-10 12:30',
-      status: 'CONFIRMED',
-      // 這裡就是綁在一起的紀錄資料 (對應 Django 1:1 關聯)
-      service_record: {
-        id: 45,
-        gel_brand_used: 'Presto 24號',
-        nail_condition: '指緣稍微乾燥，有輕微甘皮增生',
-        photo_url: 'https://example.com/nails/101.jpg'
-      }
-    }
-  ]);
+  const {
+    appointments, loading, error, editingApp, setEditingApp, openEditModal, refreshData
+  } = useAppointmentManagement();
 
-  const [editingApp, setEditingApp] = useState(null); // 當前正在彈窗編輯的預約
+  if (loading && appointments.length === 0) return <div className="text-center py-12 text-sm text-gray-400 font-medium bg-[#fcfbfa]">資料同步中...</div>;
 
-  // 處理表單欄位變更 (支援同時改預約單與服務紀錄)
-  const handleRecordChange = (field, value, isNestedRecord = false) => {
-    setEditingApp(prev => {
-      if (isNestedRecord) {
-        return {
-          ...prev,
-          service_record: { ...prev.service_record, [field]: value }
-        };
-      }
-      return { ...prev, [field]: value };
-    });
-  };
-
-  const handleSave = () => {
-    // 未來這裡直接丟給 adminService.updateAppointmentWithRecord(editingApp.id, editingApp)
-    alert(`儲存成功！已同步更新預約單 #${editingApp.id} 與服務紀錄 #${editingApp.service_record.id}`);
-    
-    // 同步更新本地狀態列表
-    setMockAppointments(prev => prev.map(item => item.id === editingApp.id ? editingApp : item));
-    setEditingApp(null); // 關閉彈窗
+  const renderStatusBadge = (status) => {
+    const mapping = {
+      'CONFIRMED': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      'PENDING': 'bg-amber-50 text-amber-600 border-amber-100',
+      'COMPLETED': 'bg-blue-50 text-blue-600 border-blue-100',
+      'CANCELLED': 'bg-gray-50 text-gray-400 border-gray-100',
+    };
+    const labelMapping = { 'CONFIRMED': '已確認', 'PENDING': '待確認', 'COMPLETED': '已完成', 'CANCELLED': '已取消' };
+    return (
+      <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${mapping[status] || mapping['PENDING']}`}>
+        {labelMapping[status] || '待確認'}
+      </span>
+    );
   };
 
   return (
-    <div className="space-y-4">
-      {/* 預約管理表格 */}
-      <div className="overflow-x-auto border border-gray-100 rounded-2xl">
+    <div className="space-y-4 text-left">
+      {error && <div className="p-4 bg-red-50 text-red-500 rounded-xl text-xs font-bold">{error}</div>}
+
+      {/* ==========================================
+        💻 情況 A：電腦版專屬表格 (手機版 hidden)
+        ========================================== */}
+      <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm text-gray-600">
           <thead className="bg-gray-50 text-gray-700 font-bold">
-            <tr>
-              <th className="p-4">預約編號</th>
+            <tr className="text-left border-b border-gray-100">
+              <th className="p-4 w-20 text-center">預約編號</th>
               <th className="p-4">顧客姓名</th>
-              <th className="p-4">施作項目</th>
+              <th className="p-4">施作項目與加購</th>
               <th className="p-4">預約時間</th>
-              <th className="p-4">狀態</th>
-              <th className="p-4">操作</th>
+              <th className="p-4">實收實付金額</th>
+              <th className="p-4 w-24">狀態</th>
+              <th className="p-4 text-right w-28">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {mockAppointments.map(app => (
-              <tr key={app.id} className="hover:bg-gray-50/50">
-                <td className="p-4 font-mono font-bold text-gray-400">#{app.id}</td>
-                <td className="p-4 font-bold text-gray-800">{app.customer_name}</td>
-                <td className="p-4">{app.service_name}</td>
-                <td className="p-4 text-xs font-medium">{app.start_time}</td>
-                <td className="p-4">
-                  <span className="bg-emerald-50 text-emerald-600 text-xs px-2 py-0.5 rounded-md font-bold">已確認</span>
-                </td>
-                <td className="p-4">
-                  <button 
-                    onClick={() => setEditingApp(JSON.parse(JSON.stringify(app)))} // 深拷貝防止未保存就污染原始數據
-                    className="text-xs bg-[#8c7654] text-white px-3 py-1.5 rounded-xl font-bold hover:bg-[#736144] transition-all"
-                  >
-                    編輯預約與紀錄
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {appointments.map(app => {
+              // 💡 1. 核心計算修正：將所有主服務金額 ＋ 所有加購項目金額進行總合計算 (加裝 Number 轉型防禦)
+              const systemTotal =
+                (app.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
+                (app.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0);
+
+              return (
+                <tr key={app.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="p-4 text-center font-mono font-bold text-gray-400">#{app.id}</td>
+                  <td className="p-4 font-bold text-gray-800">{app.customer?.name || app.customer_name}</td>
+                  <td className="p-4">
+                    {/* 💡 2. 名稱呈現修正：將多個主服務名稱用 ＋ 號串接呈現 */}
+                    <span className="font-bold text-gray-700">
+                      {app.services && app.services.length > 0
+                        ? app.services.map(s => s.name).join(' ＋ ')
+                        : (app.service_name || '無指定項目')}
+                    </span>
+
+                    {/* 加購項目標籤 */}
+                    {app.addons && app.addons.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {app.addons.map(addon => (
+                          <span key={addon.id} className="text-[9px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.2 rounded font-medium">
+                            ＋{addon.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-4 text-xs font-mono font-medium text-gray-500">
+                    {app.start_time?.replace('T', ' ').substring(0, 16)}
+                  </td>
+                  <td className="p-4 font-mono font-bold text-amber-900">
+                    {app.final_price !== null && app.final_price !== undefined ? (
+                      <span>NT$ {app.final_price} <span className="text-[10px] font-normal text-amber-600 bg-amber-50 px-1 rounded">實收</span></span>
+                    ) : (
+                      <span className="text-gray-400 font-normal">NT$ {systemTotal} (基底定價)</span>
+                    )}
+                  </td>
+                  <td className="p-4">{renderStatusBadge(app.status)}</td>
+                  <td className="p-4 text-right">
+                    <button
+                      onClick={() => openEditModal(app)}
+                      className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-black transition-all active:scale-95 shadow-sm"
+                    >
+                      編輯紀錄
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* ================= 終極綁定編輯彈窗 (Modal Drawer) ================= */}
+      {/* ==========================================
+        📱 情況 B：手機版專屬高質感卡片清單 (同步對齊多選 services)
+        ========================================== */}
+      <div className="block md:hidden space-y-3">
+        {appointments.map(app => {
+          // 💡 1. 手機版同步升級：計算所有主服務 ＋ 加購項目的基底總價
+          const systemTotal =
+            (app.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
+            (app.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0);
+
+          // 💡 2. 手機版同步升級：主服務多選名稱串接
+          const serviceNames =
+            app.services && app.services.length > 0
+              ? app.services.map(s => s.name).join(' ＋ ')
+              : (app.service_name || '無指定項目');
+
+          return (
+            <div key={app.id} className="p-4 bg-white border border-gray-100 rounded-xl shadow-sm text-left flex flex-col justify-between">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <span className="font-mono text-xs font-bold text-gray-400">#{app.id}</span>
+                  <h4 className="font-black text-gray-800 text-base mt-0.5">{app.customer?.name || app.customer_name}</h4>
+                </div>
+                {renderStatusBadge(app.status)}
+              </div>
+
+              <div className="text-xs text-gray-500 space-y-1.5 mb-3">
+                <div>
+                  {/* 顯示主服務多選結果 */}
+                  <p className="font-bold text-gray-800">💅 項目：{serviceNames}</p>
+                  
+                  {/* 加購項目標籤 */}
+                  {app.addons && app.addons.length > 0 && (
+                    <p className="text-[11px] text-amber-700 font-bold pl-5 mt-0.5">
+                      加購：{app.addons.map(a => a.name).join(', ')}
+                    </p>
+                  )}
+                </div>
+                <p className="font-mono">⏱ 時間：{app.start_time?.replace('T', ' ').substring(0, 16)}</p>
+                <p className="font-bold text-amber-900">
+                  💰 實收：{app.final_price !== null && app.final_price !== undefined ? `NT$ ${app.final_price} (實收)` : `NT$ ${systemTotal} (基底定價)`}
+                </p>
+                <p className="truncate text-gray-400">🎨 紀錄：{app.record?.materials_note || '（目前無凝膠色號紀錄）'}</p>
+              </div>
+
+              <button
+                onClick={() => openEditModal(app)}
+                className="w-full py-2.5 bg-[#f4f1eb] text-[#8c7654] font-bold text-xs rounded-xl active:scale-95 transition-all"
+              >
+                開啟聯合編輯面板 ➔
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ==========================================
+        📦 情況 C：短路邏輯條件加載 (瓦解編譯器 Bug)
+        ========================================== */}
       {editingApp && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden animate-scale-up max-h-[90vh] flex flex-col">
-            
-            {/* 彈窗標頭 */}
-            <div className="p-6 bg-gray-900 text-white flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-black">聯合編輯面板</h3>
-                <p className="text-xs text-gray-400 mt-0.5">預約單號 #{editingApp.id} & 服務紀錄 #{editingApp.service_record.id}</p>
-              </div>
-              <button onClick={() => setEditingApp(null)} className="text-gray-400 hover:text-white font-bold text-xl">✕</button>
-            </div>
-
-            {/* 滾動表單主體 */}
-            <div className="p-6 space-y-6 overflow-y-auto flex-1 text-left">
-              
-              {/* 第一部分：預約基本資料修改 */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-amber-800 uppercase tracking-wider border-l-4 border-amber-600 pl-2">第一部分：預約單核心狀態</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">預約時間</label>
-                    <input type="text" value={editingApp.start_time} onChange={(e) => handleRecordChange('start_time', e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 font-mono text-xs focus:outline-none focus:border-[#8c7654]" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">預約狀態</label>
-                    <select value={editingApp.status} onChange={(e) => handleRecordChange('status', e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 text-xs font-bold text-gray-700 focus:outline-none focus:border-[#8c7654]">
-                      <option value="PENDING">待確認</option>
-                      <option value="CONFIRMED">已確認</option>
-                      <option value="COMPLETED">已完成</option>
-                      <option value="CANCELLED">已取消</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <hr className="border-gray-100" />
-
-              {/* 第二部分：服務紀錄 (ServiceRecord) 聯合編輯 */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black text-pink-800 uppercase tracking-wider border-l-4 border-pink-500 pl-2">第二部分：美甲施作紀錄 (Service Record)</h4>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">本次使用凝膠品牌/色號</label>
-                    <input 
-                      type="text" 
-                      value={editingApp.service_record.gel_brand_used} 
-                      onChange={(e) => handleRecordChange('gel_brand_used', e.target.value, true)} // 標記為 Nested
-                      placeholder="例如：Presto 24號, Ageha 亮片膠" 
-                      className="w-full p-3 border border-gray-100 bg-gray-50 rounded-xl text-xs focus:outline-none focus:border-pink-400" 
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">美甲與指緣健康備註</label>
-                    <textarea 
-                      rows="3"
-                      value={editingApp.service_record.nail_condition} 
-                      onChange={(e) => handleRecordChange('nail_condition', e.target.value, true)} 
-                      placeholder="紀錄客人的指甲厚薄、是否有飛甲或需要特別注意的皮膚狀況..." 
-                      className="w-full p-3 border border-gray-100 bg-gray-50 rounded-xl text-xs focus:outline-none focus:border-pink-400 resize-none leading-relaxed"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">作品照雲端網址</label>
-                    <input 
-                      type="text" 
-                      value={editingApp.service_record.photo_url} 
-                      onChange={(e) => handleRecordChange('photo_url', e.target.value, true)} 
-                      placeholder="https://..." 
-                      className="w-full p-3 border border-gray-100 bg-gray-50 rounded-xl text-xs font-mono focus:outline-none focus:border-pink-400" 
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* 彈窗底部的操作條 */}
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
-              <button onClick={() => setEditingApp(null)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100">取消</button>
-              <button onClick={handleSave} className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gray-900 text-white hover:bg-black shadow-md transition-all">合併儲存變更</button>
-            </div>
-
-          </div>
-        </div>
+        <AppointmentEditModal
+          isOpen={true}
+          appointment={editingApp}
+          onClose={() => setEditingApp(null)}
+          onRefresh={() => {refreshData()}}
+        />
       )}
     </div>
   );

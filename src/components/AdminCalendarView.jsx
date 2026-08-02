@@ -1,105 +1,202 @@
-// src/pages/AdminDashboard.jsx
-import React from 'react';
+// src/components/AdminCalendarView.jsx
+import React, { useState, useEffect } from 'react';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
+import AppointmentEditModal from './AppointmentEditModal';
 
-const AdminDashboard = () => {
+const AdminCalendarView = () => {
   const {
     stats, appointments, loading, weekDays,
-    selectedAppointment, setSelectedAppointment, navigateWeek
+    selectedAppointment, setSelectedAppointment, navigateWeek,
+    refreshData,
+    providers,
+    selectedProviderId,
+    setSelectedProviderId
   } = useAdminDashboard();
 
-  // 輔助過濾：將後端撈回來的單維陣列，依據天數分類到對應的星期欄位
+  const [activeMobileDayIdx, setActiveMobileDayIdx] = useState(0);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (weekDays && weekDays.length > 0) {
+      const todayStr = new Date().toDateString();
+      const todayIdx = weekDays.findIndex(day => day.toDateString() === todayStr);
+      setActiveMobileDayIdx(todayIdx !== -1 ? todayIdx : 0);
+    }
+  }, [weekDays]);
+
   const getAppointmentsForDay = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    if (!date) return [];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
     return appointments.filter(app => app.start_time.startsWith(dateStr));
   };
 
+  const renderStatusBadge = (status) => {
+    const mapping = {
+      'CONFIRMED': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      'PENDING': 'bg-amber-50 text-amber-600 border-amber-100',
+      'COMPLETED': 'bg-blue-50 text-blue-600 border-blue-100',
+      'CANCELLED': 'bg-gray-50 text-gray-400 border-gray-100',
+    };
+    const labelMapping = { 'CONFIRMED': '已確認', 'PENDING': '待確認', 'COMPLETED': '已完成', 'CANCELLED': '已取消' };
+    return (
+      <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-md font-bold border ${mapping[status] || mapping['PENDING']}`}>
+        {labelMapping[status] || '待確認'}
+      </span>
+    );
+  };
+
+  const totalDuration = selectedAppointment
+    ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) +
+      (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
+    : 0;
+
+  const systemTotal = selectedAppointment
+    ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
+      (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
+    : 0;
+
+  if (loading && weekDays.length === 0) return <div className="text-center py-20 text-sm text-gray-400">行事曆同步中...</div>;
+
   return (
-    <div className="min-h-screen bg-[#fcfbfa] text-gray-800 p-4 md:p-8">
-      {/* ================= 頂部導覽列 ================= */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="animate-fade-in text-left">
+      {/* ================= 1. 內頁週切換控制項與人員篩選 ================= */}
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Z. Studio 管理後台</h1>
-          <p className="text-sm text-gray-400 mt-1">營運即時數據與預約行事曆面板</p>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">營運看板中心</h2>
+          <p className="text-xs text-gray-400 mt-0.5">即時店務數據與預約碰撞防禦排班表</p>
         </div>
-        
-        {/* 週切換控制項 */}
-        <div className="flex items-center space-x-2 bg-white border border-gray-100 p-1.5 rounded-xl shadow-sm">
-          <button onClick={() => navigateWeek(-1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-gray-400 hover:text-gray-700">←</button>
-          <span className="text-sm font-bold px-3">週視圖</span>
-          <button onClick={() => navigateWeek(1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-gray-400 hover:text-gray-700">→</button>
+
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+          {/* 💡 4. 美甲師切換下拉選單 */}
+          <select
+            value={selectedProviderId}
+            onChange={(e) => setSelectedProviderId(e.target.value)}
+            className="px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white shadow-sm focus:border-black focus:outline-none"
+          >
+            <option value="all">全店總覽</option>
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center space-x-2 bg-white border border-gray-100 p-1 rounded-xl shadow-sm">
+            <button onClick={() => navigateWeek(-1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">← 上一週</button>
+            <span className="text-xs font-bold px-3">週視圖</span>
+            <button onClick={() => navigateWeek(1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">下一週 →</button>
+          </div>
         </div>
       </header>
 
-      {/* ================= 營收與指標看板列 (響應式 Grid) ================= */}
+      {/* ================= 2. 營收指標列 ================= */}
       {stats && (
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-          <div className="bg-[#f4f1eb] border border-[#e8e3d9] p-6 rounded-2xl">
-            <p className="text-xs font-bold text-gray-400 tracking-wider uppercase">今日營收 / 本月營業額</p>
-            <div className="flex items-baseline space-x-2 mt-2">
-              <span className="text-2xl font-black text-[#8c7654]">NT$ {stats.revenue.today}</span>
-              <span className="text-xs text-gray-400">/ 本月 NT$ {stats.revenue.month}</span>
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5 mb-6">
+          <div className="bg-[#f4f1eb] border border-[#e8e3d9] p-4 md:p-6 rounded-2xl">
+            <p className="text-[10px] md:text-xs font-bold text-gray-400 tracking-wider uppercase">今日營收 / 本月營業額</p>
+            <div className="flex items-baseline space-x-2 mt-1 md:mt-2">
+              <span className="text-xl md:text-2xl font-black text-[#8c7654]">NT$ {stats.revenue.today}</span>
+              <span className="text-[10px] md:text-xs text-gray-400">/ 月 NT$ {stats.revenue.month}</span>
             </div>
           </div>
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm">
-            <p className="text-xs font-bold text-gray-400 tracking-wider uppercase">今日總預約</p>
-            <p className="text-2xl font-black text-gray-900 mt-2">{stats.today_counts.total} 筆</p>
+          <div className="bg-white border border-gray-100 p-4 md:p-6 rounded-2xl shadow-sm flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
+            <p className="text-[10px] md:text-xs font-bold text-gray-400 tracking-wider uppercase">今日總預約</p>
+            <p className="text-xl md:text-2xl font-black text-gray-900 mt-0 sm:mt-2">{stats.today_counts.total} 筆</p>
           </div>
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm">
-            <p className="text-xs font-bold text-gray-400 tracking-wider uppercase">待確認 / 已確認</p>
-            <p className="text-2xl font-black text-amber-600 mt-2">
-              {stats.today_counts.pending} <span className="text-gray-300 font-light text-xl">/</span> <span className="text-emerald-600">{stats.today_counts.confirmed}</span>
+          <div className="bg-white border border-gray-100 p-4 md:p-6 rounded-2xl shadow-sm flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
+            <p className="text-[10px] md:text-xs font-bold text-gray-400 tracking-wider uppercase">待確認 / 已確認</p>
+            <p className="text-xl md:text-2xl font-black text-amber-600 mt-0 sm:mt-2">
+              {stats.today_counts.pending} <span className="text-gray-300 font-light text-lg">/</span> <span className="text-emerald-600">{stats.today_counts.confirmed}</span>
             </p>
           </div>
         </section>
       )}
 
-      {/* ================= 主工作區：左行事曆，右詳情面板 ================= */}
+      {/* ================= 3. 主工作區 ================= */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        
-        {/* 左側：7天週曆欄位 (手機上自動變為單排向下延伸或橫向過濾，電腦上為寬軌 7 欄) */}
-        <div className="flex-1 w-full bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4 min-w-[700px] md:min-w-0">
+
+        {/* 左側：週曆核心網格 */}
+        <div className="flex-1 w-full bg-white border border-gray-100 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-sm">
+
+          {/* 📱 手機版 7 天頁籤 */}
+          <div className="grid grid-cols-7 gap-1 bg-gray-50 p-1 rounded-xl mb-4 md:hidden">
+            {weekDays.map((day, idx) => {
+              const isSelected = activeMobileDayIdx === idx;
+              const isToday = day.toDateString() === new Date().toDateString();
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveMobileDayIdx(idx)}
+                  className={`flex flex-col items-center py-2 rounded-lg transition-all ${isSelected ? 'bg-white text-gray-900 shadow-sm font-black' : 'text-gray-400'}`}
+                >
+                  <span className="text-[10px] scale-90">{['一', '二', '三', '四', '五', '六', '日'][idx]}</span>
+                  <span className={`text-xs mt-0.5 w-5 h-5 flex items-center justify-center rounded-full ${isToday && !isSelected ? 'bg-amber-100 text-amber-800 font-bold' : ''} ${isToday && isSelected ? 'bg-amber-600 text-white' : ''}`}>
+                    {day.getDate()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 💻/📱 行事曆網格 */}
+          <div className="block md:grid md:grid-cols-7 md:gap-4">
             {weekDays.map((day, idx) => {
               const dayApps = getAppointmentsForDay(day);
               const isToday = day.toDateString() === new Date().toDateString();
-              
+
               return (
-                <div key={idx} className={`flex flex-col min-h-[450px] rounded-2xl p-2 transition-all ${isToday ? 'bg-amber-50/40 border border-amber-200/50' : 'bg-gray-50/50'}`}>
-                  {/* 天數標題標頭 */}
-                  <div className="text-center pb-3 border-b border-gray-100/80 mb-3">
-                    <p className="text-xs font-bold text-gray-300">週{['一','二','三','四','五','六','日'][idx]}</p>
+                <div
+                  key={idx}
+                  className={`flex-col min-h-0 md:min-h-[450px] rounded-2xl p-0 md:p-2 transition-all 
+                    ${activeMobileDayIdx === idx ? 'flex' : 'hidden md:flex'}
+                    ${isToday ? 'md:bg-amber-50/40 md:border md:border-amber-200/50' : 'md:bg-gray-50/50'}`}
+                >
+                  <div className="hidden md:block text-center pb-3 border-b border-gray-100/80 mb-3">
+                    <p className="text-xs font-bold text-gray-300">週{['一', '二', '三', '四', '五', '六', '日'][idx]}</p>
                     <p className={`text-base font-black mt-0.5 w-7 h-7 mx-auto flex items-center justify-center rounded-full ${isToday ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-700'}`}>
                       {day.getDate()}
                     </p>
                   </div>
 
-                  {/* 當天預約卡片堆疊 */}
-                  <div className="flex-1 space-y-2 overflow-y-auto max-h-[400px] pr-1">
-                    {dayApps.map(app => (
-                      <div
-                        key={app.id}
-                        onClick={() => setSelectedAppointment(app)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all active:scale-95 text-left
-                          ${selectedAppointment?.id === app.id 
-                            ? 'bg-[#cdbfa8] border-[#bcae97] text-white' 
-                            : 'bg-white border-gray-100 hover:border-amber-200 shadow-sm'}`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <p className="text-xs font-black truncate max-w-[70px]">{app.customer.name}</p>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase
-                            ${app.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                            {app.status === 'CONFIRMED' ? '已確認' : '待確認'}
-                          </span>
+                  <div className="flex-1 space-y-2 md:overflow-y-auto md:max-h-[400px] pr-0 md:pr-1">
+                    {dayApps.map(app => {
+                      const isCurrentSelected = selectedAppointment?.id === app.id;
+                      return (
+                        <div
+                          key={app.id}
+                          onClick={() => setSelectedAppointment(app)}
+                          className={`p-3.5 md:p-3 rounded-xl border cursor-pointer transition-all active:scale-95 text-left 
+                            ${isCurrentSelected ? 'bg-[#cdbfa8] border-[#bcae97] text-white shadow-md' : 'bg-white border-gray-100 hover:border-amber-200 shadow-sm'}`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <p className="text-sm md:text-xs font-black truncate max-w-[120px] md:max-w-[70px]">{app.customer?.name || app.customer_name}</p>
+                            <div className={isCurrentSelected ? '!bg-white/10 rounded-md text-white' : ''}>
+                              {renderStatusBadge(app.status)}
+                            </div>
+                          </div>
+                          <p className={`text-xs md:text-[11px] font-mono font-medium tracking-wide ${isCurrentSelected ? 'text-amber-50' : 'text-gray-400'}`}>
+                            ⏱ {app.start_time.substring(11, 16)}
+                          </p>
+
+                          <p className="text-sm md:text-xs font-bold truncate mt-1">
+                            {app.services && app.services.length > 0
+                              ? app.services.map(s => s.name).join(' ＋ ')
+                              : (app.service?.name || app.service_name || '無指定項目')}
+                          </p>
+
+                          {app.addons && app.addons.length > 0 && (
+                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded mt-1 inline-block ${isCurrentSelected ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-700'}`}>
+                              ＋{app.addons.length} 加購
+                            </span>
+                          )}
                         </div>
-                        <p className={`text-[11px] font-medium tracking-wide truncate ${selectedAppointment?.id === app.id ? 'text-amber-5' : 'text-gray-400'}`}>
-                          ⏱ {app.start_time.substring(11, 16)}
-                        </p>
-                        <p className="text-xs font-bold truncate mt-1">{app.service.name}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {dayApps.length === 0 && (
-                      <div className="flex flex-col items-center justify-center h-32 text-gray-200 text-[11px] font-medium">無預約</div>
+                      <div className="flex flex-col items-center justify-center h-40 md:h-32 text-gray-300 text-xs md:text-[11px] font-medium">🎉 這天完全空檔</div>
                     )}
                   </div>
                 </div>
@@ -108,57 +205,110 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* ================= 右側：預約詳情資訊面板 Drawer ================= */}
-        <div className="w-full lg:w-80 shrink-0 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm sticky top-24">
-          {selectedAppointment ? (
-            <div className="animate-fade-in text-left">
+        {/* 右側 / 手機浮出：精簡唯讀摘要面板 */}
+        {selectedAppointment && (
+          <div className="fixed inset-0 bg-black/40 z-[60] flex items-end justify-center animate-fade-in lg:static lg:bg-transparent lg:z-auto lg:flex-initial lg:w-80 lg:shrink-0">
+            <div className="absolute inset-0 lg:hidden" onClick={() => setSelectedAppointment(null)} />
+
+            <div className="relative w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-3xl p-6 pb-10 lg:pb-6 shadow-2xl transition-all duration-300 lg:w-full lg:max-h-none lg:rounded-3xl lg:border lg:border-gray-100 lg:shadow-sm lg:sticky lg:top-24">
+              <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-4 lg:hidden" />
+
               <div className="flex justify-between items-start border-b border-gray-50 pb-4 mb-4">
                 <div>
                   <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-md">單號 #{selectedAppointment.id}</span>
-                  <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer.name}</h3>
+                  <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer?.name || selectedAppointment.customer_name}</h3>
                 </div>
-                <span className="text-xs bg-emerald-50 text-emerald-700 font-bold px-2 py-1 rounded-lg">已確認</span>
+                <button onClick={() => setSelectedAppointment(null)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full lg:hidden font-bold">✕</button>
               </div>
 
               <div className="space-y-4 text-sm">
+                <div className="flex justify-between items-center bg-gray-50 p-2.5 px-3 rounded-xl border border-gray-100/50">
+                  <span className="text-xs text-gray-400 font-bold">預約狀態</span>
+                  {renderStatusBadge(selectedAppointment.status)}
+                </div>
+
                 <div>
                   <label className="text-xs text-gray-400 block font-medium">聯絡電話</label>
-                  <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.customer.phone}</p>
+                  <p className="font-bold text-gray-700 mt-0.5 font-mono">{selectedAppointment.customer?.phone || selectedAppointment.customer_phone || '無資料'}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50">
-                  <label className="text-xs text-gray-400 block font-medium">預約項目</label>
-                  <p className="font-black text-gray-800 text-base mt-0.5">{selectedAppointment.service.name}</p>
-                  <div className="flex justify-between items-center mt-3 text-xs text-gray-500 pt-2 border-t border-gray-200/50">
-                    <span>⏱ {selectedAppointment.service.duration_minutes} 分鐘</span>
-                    <span className="font-black text-amber-700 text-sm">NT$ {selectedAppointment.service.price}</span>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
+                  <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
+                  <p className="font-black text-gray-800 text-base mb-2">
+                    {selectedAppointment.services && selectedAppointment.services.length > 0
+                      ? selectedAppointment.services.map(s => s.name).join(' ＋ ')
+                      : (selectedAppointment.service?.name || selectedAppointment.service_name || '未指定主服務')}
+                  </p>
+
+                  {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
+                    <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2.5 rounded-xl space-y-1 border border-amber-100/50">
+                      {selectedAppointment.addons.map(a => (
+                        <p key={a.id} className="flex justify-between items-center">
+                          <span>＋ {a.name}</span>
+                          <span className="text-amber-700 font-semibold">NT$ {a.price}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200/50">
+                    <span>⏱ 總計施作時長</span>
+                    <span className="font-bold text-gray-700 font-mono">{totalDuration} 分鐘</span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                    <span>💰 實收 / 預估收費</span>
+                    <span className="font-black text-amber-900 text-sm font-mono">
+                      {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined
+                        ? `實收 NT$ ${selectedAppointment.final_price}`
+                        : `預估 NT$ ${systemTotal}`}
+                    </span>
                   </div>
                 </div>
+
                 <div>
                   <label className="text-xs text-gray-400 block font-medium">擔當美甲師</label>
-                  <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name}</p>
+                  <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name || '未指定'}</p>
                 </div>
+
                 <div>
-                  <label className="text-xs text-gray-400 block font-medium">預約備註</label>
+                  <label className="text-xs text-gray-400 block font-medium">客戶留言與備註</label>
                   <p className="text-xs text-gray-500 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl mt-1 leading-relaxed border border-gray-100/30">
                     {selectedAppointment.memo || '無備註描述'}
                   </p>
                 </div>
               </div>
 
-              {/* 狀態切換按鈕組 */}
-              <div className="grid grid-cols-2 gap-2 mt-6 pt-4 border-t border-gray-50">
-                <button className="py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-emerald-700 transition-all">標記完成</button>
-                <button className="py-2.5 border border-red-100 text-red-500 font-bold text-xs rounded-xl hover:bg-red-50 transition-all">標記未到</button>
+              <div className="mt-6 pt-4 border-t border-gray-50">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center"
+                >
+                  ⚡ 開啟聯合編輯 / 現場結帳 ➔
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-20 text-gray-300 font-medium text-sm">請點擊行事曆卡片<br />查看客戶預約詳情</div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {!selectedAppointment && (
+          <div className="hidden lg:block w-80 shrink-0 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm text-center py-20 text-gray-300 font-medium text-sm sticky top-24">請點擊行事曆卡片<br />查看客戶預約詳情</div>
+        )}
 
       </div>
+
+      {isEditModalOpen && (
+        <AppointmentEditModal
+          isOpen={true}
+          appointment={selectedAppointment}
+          onClose={() => setIsEditModalOpen(false)}
+          onRefresh={refreshData}
+        />
+      )}
+
     </div>
   );
 };
 
-export default AdminDashboard;
+export default AdminCalendarView;

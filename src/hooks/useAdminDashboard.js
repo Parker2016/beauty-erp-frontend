@@ -1,6 +1,6 @@
 // src/hooks/useAdminDashboard.js
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { adminService } from '../services/admin';
+import { adminService } from '../services/admin'; 
 
 export const useAdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -8,27 +8,31 @@ export const useAdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // 管理當前行事曆定錨的日期 (預設為今天)
+  const [providers, setProviders] = useState([]);
+  const [selectedProviderId, setSelectedProviderId] = useState('all');
+
   const [currentDate, setCurrentDate] = useState(new Date());
-  // 記錄業主當前點擊選中的預約項目 (用於右側抽屜或側邊欄)
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
-  // 輔助函式：計算給定日期所在那一週的週一與週日 (YYYY-MM-DD)
+  const safeFormatDate = useCallback((d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   const getWeekRange = useCallback((date) => {
     const current = new Date(date);
     const day = current.getDay();
-    // 調整星期天 (0 改為 7) 讓星期一成為一週的第一天
     const distanceToMonday = day === 0 ? -6 : 1 - day; 
     
     const monday = new Date(current.setDate(current.getDate() + distanceToMonday));
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 
-    const formatDate = (d) => d.toISOString().split('T')[0];
-    return { monday: formatDate(monday), sunday: formatDate(sunday) };
-  }, []);
+    return { monday: safeFormatDate(monday), sunday: safeFormatDate(sunday) };
+  }, [safeFormatDate]);
 
-  // 取得當前週的 7 個天數陣列，供 UI 畫出星期一到日
   const weekDays = useMemo(() => {
     const { monday } = getWeekRange(currentDate);
     const start = new Date(monday);
@@ -39,39 +43,57 @@ export const useAdminDashboard = () => {
     });
   }, [currentDate, getWeekRange]);
 
-  // 刷新核心看板與行事曆數據
+  // 💡 2. 初始化載入美甲師清單
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const res = await adminService.getProviders();
+        setProviders(res.data || res);
+      } catch (err) {
+        console.error("載入美甲師清單失敗", err);
+      }
+    };
+    fetchProviders();
+  }, []);
+
+  // 刷新核心數據（💡 3. 將 selectedProviderId 帶入 API 請求）
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { monday, sunday } = getWeekRange(currentDate);
       
-      // Concurrency 併發：同時發送營收統計與行事曆區間請求
       const [statsRes, calendarRes] = await Promise.all([
-        adminService.getDashboardStats(),
-        adminService.getCalendarAppointments(monday, sunday)
+        adminService.getDashboardStats(1, selectedProviderId),       // 傳入 shop_id=1 與 provider_id
+        adminService.getCalendarAppointments(monday, sunday, 1, selectedProviderId) // 傳入 start, end, shop_id=1, provider_id
       ]);
       
-      setStats(statsRes);
-      setAppointments(calendarRes);
-      
-      // 預設將第一筆預約設為選中狀態 (仿截圖右側面板預設有資料)
-      if (calendarRes.length > 0 && !selectedAppointment) {
-        setSelectedAppointment(calendarRes[0]);
-      }
+      setStats(statsRes.data || statsRes);
+      setAppointments(calendarRes.data || calendarRes);
     } catch (err) {
       setError('載入後台數據失敗，請檢查後端連線。');
     } finally {
       setLoading(false);
     }
-  }, [currentDate, getWeekRange, selectedAppointment]);
+  }, [currentDate, getWeekRange, selectedProviderId]);
 
-  // 當日期定錨改變時，自動重新載入該週資料
   useEffect(() => {
     fetchDashboardData();
-  }, [currentDate]);
+  }, [currentDate, selectedProviderId, fetchDashboardData]);
 
-  // 切換週的方法
+  // 智慧預選
+  useEffect(() => {
+    setSelectedAppointment(prev => {
+      if (appointments.length === 0) return null;
+      const latestSnapshot = appointments.find(app => app.id === prev?.id);
+      if (window.innerWidth >= 1024) {
+        return latestSnapshot || appointments[0];
+      } else {
+        return latestSnapshot || null;
+      }
+    });
+  }, [appointments]);
+
   const navigateWeek = (direction) => {
     setCurrentDate(prev => {
       const next = new Date(prev);
@@ -89,6 +111,9 @@ export const useAdminDashboard = () => {
     weekDays,
     selectedAppointment,
     setSelectedAppointment,
+    providers,
+    selectedProviderId,
+    setSelectedProviderId,
     navigateWeek,
     refreshData: fetchDashboardData
   };
