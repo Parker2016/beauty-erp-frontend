@@ -5,7 +5,7 @@ import AppointmentEditModal from './AppointmentEditModal';
 
 const AppointmentWithRecordEditor = () => {
   const {
-    appointments, loading, error, editingApp, setEditingApp, openEditModal
+    appointments, loading, error, editingApp, setEditingApp, openEditModal, refreshData
   } = useAppointmentManagement();
 
   if (loading && appointments.length === 0) return <div className="text-center py-12 text-sm text-gray-400 font-medium bg-[#fcfbfa]">資料同步中...</div>;
@@ -165,7 +165,7 @@ const AppointmentWithRecordEditor = () => {
           isOpen={true}
           appointment={editingApp}
           onClose={() => setEditingApp(null)}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => {refreshData()}}
         />
       )}
     </div>

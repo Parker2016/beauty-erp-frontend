@@ -1,14 +1,14 @@
 // src/pages/AdminDashboard.jsx
 import React, { useState } from 'react';
-import AdminCalendarView from '../components/AdminCalendarView'; // 💡 剛才分拆出去的行事曆大組件
-import AdminManagement from '../components/AdminManagement';     // 包含人員與品項上架的組件
+import AdminCalendarView from '../components/AdminCalendarView'; 
+import AdminManagement from '../components/AdminManagement';     
+import QuickQuoteView from '../components/calculator/QuickQuoteView'; // 💡 1. 引入剛剛做好的獨立報價頁面
 
 const AdminDashboard = () => {
-  // 💡 核心開關：'dashboard' (看板與行事曆) 或 'management' (資料基礎建設)
+  // 💡 增加一個新狀態 'quote'
   const [adminSubView, setAdminSubView] = useState('dashboard');
 
   return (
-    /* pb-16: 為手機版底部導覽列預留空間，防止內容被按鈕遮擋 */
     <div className="min-h-screen bg-[#fcfbfa] flex flex-col md:flex-row pb-16 md:pb-0">
       
       {/* ==========================================
@@ -42,6 +42,15 @@ const AdminDashboard = () => {
           >
             <span>📊</span> <span>營運看板中心</span>
           </button>
+
+          {/* 💡 2. 電腦版新增：快速報價小幫手 */}
+          <button 
+            onClick={() => setAdminSubView('quote')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-bold text-sm transition-all
+              ${adminSubView === 'quote' ? 'bg-[#f4f1eb] text-[#8c7654]' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            <span>🧮</span> <span>快速報價系統</span>
+          </button>
           
           <button 
             onClick={() => setAdminSubView('management')}
@@ -56,20 +65,19 @@ const AdminDashboard = () => {
       {/* ==========================================
         📦 3. 中央主內容路由渲染區
         ========================================== */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        {adminSubView === 'dashboard' ? (
-          <AdminCalendarView />
-        ) : (
-          <AdminManagement />
-        )}
+      <main className="flex-1 overflow-y-auto">
+        {/* 💡 3. 根據狀態切換顯示不同元件，報價系統不給 padding 讓他自己掌控佈局 */}
+        {adminSubView === 'dashboard' && <div className="p-4 md:p-8"><AdminCalendarView /></div>}
+        {adminSubView === 'management' && <div className="p-4 md:p-8"><AdminManagement /></div>}
+        {adminSubView === 'quote' && <QuickQuoteView />}
       </main>
 
       {/* ==========================================
-        📱 4. 手機版專屬：底部 App 級別導覽列列列！(這裡就是切換路徑！)
+        📱 4. 手機版專屬：底部 App 級別導覽列
         ========================================== */}
-      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 grid grid-cols-2 z-50 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+      {/* 💡 4. 改為 grid-cols-3 */}
+      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 grid grid-cols-3 z-50 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
         
-        {/* 按鈕一：切到行事曆看板 */}
         <button
           onClick={() => setAdminSubView('dashboard')}
           className={`flex flex-col justify-center items-center space-y-0.5 transition-all active:scale-95
@@ -80,7 +88,17 @@ const AdminDashboard = () => {
           {adminSubView === 'dashboard' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
         </button>
 
-        {/* 按鈕二：切到人員、品項基礎建設管理 (點這裡就能進去了！) */}
+        {/* 💡 5. 手機版新增：快速報價小幫手 */}
+        <button
+          onClick={() => setAdminSubView('quote')}
+          className={`flex flex-col justify-center items-center space-y-0.5 transition-all active:scale-95
+            ${adminSubView === 'quote' ? 'text-[#8c7654] font-black' : 'text-gray-400 font-medium'}`}
+        >
+          <span className="text-xl">🧮</span>
+          <span className="text-[11px]">快速報價</span>
+          {adminSubView === 'quote' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
+        </button>
+
         <button
           onClick={() => setAdminSubView('management')}
           className={`flex flex-col justify-center items-center space-y-0.5 transition-all active:scale-95

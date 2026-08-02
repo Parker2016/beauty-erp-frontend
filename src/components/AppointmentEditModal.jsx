@@ -1,10 +1,10 @@
 // src/components/AppointmentEditModal.jsx
 import React, { useState, useEffect } from 'react';
 import { adminService } from '../services/admin';
+import AppointmentCalculatorModal from './calculator/AppointmentCalculatorModal';
 
 const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
     if (!isOpen || !appointment) return null;
-
     // 在彈窗內部獨立接管表單狀態
     const [formState, setFormState] = useState({
         status: '',
@@ -15,6 +15,7 @@ const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState(null);
+    const [isCalcOpen, setIsCalcOpen] = useState(false);
 
     // 當傳入的預約單改變時，重新初始化內部狀態
     useEffect(() => {
@@ -57,6 +58,10 @@ const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleCalculatorConfirm = (calculatedTotal) => {
+        setFormState(prev => ({ ...prev, final_price: calculatedTotal }));
     };
 
     // 💡 1. 核心優化：動態推導系統原定價基準線（所有主服務總額 + 所有加購總額）
@@ -135,9 +140,18 @@ const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
                                 />
                             </div>
 
-                            {/* 現場實收改價 */}
+                            {/* 現場實收改價 (修改後) */}
                             <div>
-                                <label className="block text-[11px] font-bold text-amber-800 mb-1">💸 本次實際收費 (現場改價)</label>
+                                <label className="flex justify-between items-end mb-1">
+                                    <span className="text-[11px] font-bold text-amber-800">💸 本次實際收費 (現場改價)</span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsCalcOpen(true)}
+                                        className="text-[10px] bg-gray-900 text-white px-2 py-1 rounded-md font-bold hover:bg-black transition-colors"
+                                    >
+                                        🧮 開啟計價小幫手
+                                    </button>
+                                </label>
                                 <input
                                     type="number"
                                     placeholder={`系統總原價: ${systemCalculatedTotal}`}
@@ -210,6 +224,13 @@ const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
                         {isSaving ? '同步至雲端中...' : '確認保存變更'}
                     </button>
                 </div>
+
+                <AppointmentCalculatorModal
+                    isOpen={isCalcOpen}
+                    onClose={() => setIsCalcOpen(false)}
+                    appointmentId={appointment.id}
+                    onConfirmPrice={handleCalculatorConfirm}
+                />
             </form>
         </div>
     );
