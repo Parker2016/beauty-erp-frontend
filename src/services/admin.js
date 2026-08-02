@@ -14,23 +14,35 @@ export const adminService = {
    * @param {string} startDate - 開始日期 (格式：'YYYY-MM-DD')
    * @param {string} endDate - 結束日期 (格式：'YYYY-MM-DD')
    * @param {number} [shopId=1] - 店家 ID
+   * @param {string|number} [providerId='all'] - 美甲師 ID (選填，預設 'all')
    * @returns {Promise<Array>} 預約卡片清單
    */
-  getCalendarAppointments: (startDate, endDate, shopId = 1) => {
-    return http.get('admin/calendar/', {
-      params: { start_date: startDate, end_date: endDate, shop_id: shopId }
-    });
+  getCalendarAppointments: (startDate, endDate, shopId = 1, providerId = 'all') => {
+    const params = { start_date: startDate, end_date: endDate, shop_id: shopId };
+    
+    // 💡 只有當有指定特定美甲師（非 'all' 且不為空）時才帶入 provider_id
+    if (providerId && providerId !== 'all') {
+      params.provider_id = providerId;
+    }
+
+    return http.get('admin/calendar/', { params });
   },
 
   /**
    * 取得今日/本週/本月營收與看盤關鍵指標 (KPI Stats)
    * @param {number} [shopId=1] - 店家 ID
+   * @param {string|number} [providerId='all'] - 美甲師 ID (選填，預設 'all')
    * @returns {Promise<Object>} 營收統計數據物件
    */
-  getDashboardStats: (shopId = 1) => {
-    return http.get('admin/stats/', {
-      params: { shop_id: shopId }
-    });
+  getDashboardStats: (shopId = 1, providerId = 'all') => {
+    const params = { shop_id: shopId };
+
+    // 💡 只有當有指定特定美甲師（非 'all' 且不為空）時才帶入 provider_id
+    if (providerId && providerId !== 'all') {
+      params.provider_id = providerId;
+    }
+
+    return http.get('admin/stats/', { params });
   },
 
   // =========================================================================
