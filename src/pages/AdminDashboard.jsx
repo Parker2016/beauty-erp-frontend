@@ -2,10 +2,10 @@
 import React, { useState } from 'react';
 import AdminCalendarView from '../components/AdminCalendarView'; 
 import AdminManagement from '../components/AdminManagement';     
-import QuickQuoteView from '../components/calculator/QuickQuoteView'; // 💡 1. 引入剛剛做好的獨立報價頁面
+import QuickQuoteView from '../components/calculator/QuickQuoteView';
+import ProviderSchedulePage from './ProviderSchedulePage';
 
 const AdminDashboard = () => {
-  // 💡 增加一個新狀態 'quote'
   const [adminSubView, setAdminSubView] = useState('dashboard');
 
   return (
@@ -42,14 +42,22 @@ const AdminDashboard = () => {
           >
             <span>📊</span> <span>營運看板中心</span>
           </button>
-
-          {/* 💡 2. 電腦版新增：快速報價小幫手 */}
+          
           <button 
             onClick={() => setAdminSubView('quote')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-bold text-sm transition-all
               ${adminSubView === 'quote' ? 'bg-[#f4f1eb] text-[#8c7654]' : 'text-gray-500 hover:bg-gray-50'}`}
           >
             <span>🧮</span> <span>快速報價系統</span>
+          </button>
+
+          {/* 💡 3. 電腦版新增：人員排班管理 */}
+          <button 
+            onClick={() => setAdminSubView('shifts')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-bold text-sm transition-all
+              ${adminSubView === 'shifts' ? 'bg-[#f4f1eb] text-[#8c7654]' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            <span>📅</span> <span>人員排班管理</span>
           </button>
           
           <button 
@@ -66,17 +74,18 @@ const AdminDashboard = () => {
         📦 3. 中央主內容路由渲染區
         ========================================== */}
       <main className="flex-1 overflow-y-auto">
-        {/* 💡 3. 根據狀態切換顯示不同元件，報價系統不給 padding 讓他自己掌控佈局 */}
         {adminSubView === 'dashboard' && <div className="p-4 md:p-8"><AdminCalendarView /></div>}
         {adminSubView === 'management' && <div className="p-4 md:p-8"><AdminManagement /></div>}
         {adminSubView === 'quote' && <QuickQuoteView />}
+        {/* 💡 4. 渲染排班頁面 */}
+        {adminSubView === 'shifts' && <div className="p-4 md:p-8"><ProviderSchedulePage /></div>}
       </main>
 
       {/* ==========================================
         📱 4. 手機版專屬：底部 App 級別導覽列
         ========================================== */}
-      {/* 💡 4. 改為 grid-cols-3 */}
-      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 grid grid-cols-3 z-50 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+      {/* 💡 5. 改為 grid-cols-4 讓四個選項均分空間 */}
+      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 grid grid-cols-4 z-50 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.03)] pb-[env(safe-area-inset-bottom)]">
         
         <button
           onClick={() => setAdminSubView('dashboard')}
@@ -84,19 +93,29 @@ const AdminDashboard = () => {
             ${adminSubView === 'dashboard' ? 'text-[#8c7654] font-black' : 'text-gray-400 font-medium'}`}
         >
           <span className="text-xl">📊</span>
-          <span className="text-[11px]">營運看板</span>
+          <span className="text-[10px]">看板</span>
           {adminSubView === 'dashboard' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
         </button>
 
-        {/* 💡 5. 手機版新增：快速報價小幫手 */}
         <button
           onClick={() => setAdminSubView('quote')}
           className={`flex flex-col justify-center items-center space-y-0.5 transition-all active:scale-95
             ${adminSubView === 'quote' ? 'text-[#8c7654] font-black' : 'text-gray-400 font-medium'}`}
         >
           <span className="text-xl">🧮</span>
-          <span className="text-[11px]">快速報價</span>
+          <span className="text-[10px]">報價</span>
           {adminSubView === 'quote' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
+        </button>
+
+        {/* 💡 6. 手機版新增：排班頁面按鈕 */}
+        <button
+          onClick={() => setAdminSubView('shifts')}
+          className={`flex flex-col justify-center items-center space-y-0.5 transition-all active:scale-95
+            ${adminSubView === 'shifts' ? 'text-[#8c7654] font-black' : 'text-gray-400 font-medium'}`}
+        >
+          <span className="text-xl">📅</span>
+          <span className="text-[10px]">排班</span>
+          {adminSubView === 'shifts' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
         </button>
 
         <button
@@ -105,7 +124,7 @@ const AdminDashboard = () => {
             ${adminSubView === 'management' ? 'text-[#8c7654] font-black' : 'text-gray-400 font-medium'}`}
         >
           <span className="text-xl">⚙️</span>
-          <span className="text-[11px]">資料管理</span>
+          <span className="text-[10px]">設定</span>
           {adminSubView === 'management' && <div className="w-4 h-0.5 bg-[#8c7654] rounded-full mt-0.5" />}
         </button>
 
