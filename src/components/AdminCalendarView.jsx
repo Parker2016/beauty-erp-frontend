@@ -7,7 +7,10 @@ const AdminCalendarView = () => {
   const {
     stats, appointments, loading, weekDays,
     selectedAppointment, setSelectedAppointment, navigateWeek,
-    refreshData
+    refreshData,
+    providers,
+    selectedProviderId,
+    setSelectedProviderId
   } = useAdminDashboard();
 
   const [activeMobileDayIdx, setActiveMobileDayIdx] = useState(0);
@@ -21,7 +24,6 @@ const AdminCalendarView = () => {
     }
   }, [weekDays]);
 
-  // 💡 1. 核心修復：使用本地時間格式化 YYYY-MM-DD，瓦解 UTC 時區導致日期少一天的 Bug
   const getAppointmentsForDay = (date) => {
     if (!date) return [];
     const year = date.getFullYear();
@@ -47,13 +49,11 @@ const AdminCalendarView = () => {
     );
   };
 
-  // 總時長（所有主服務 + 所有加購）
   const totalDuration = selectedAppointment
     ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) +
       (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
     : 0;
 
-  // 系統預設總價（所有主服務 + 所有加購）
   const systemTotal = selectedAppointment
     ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
       (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
@@ -63,17 +63,31 @@ const AdminCalendarView = () => {
 
   return (
     <div className="animate-fade-in text-left">
-      {/* ================= 1. 內頁週切換控制項 ================= */}
+      {/* ================= 1. 內頁週切換控制項與人員篩選 ================= */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h2 className="text-xl font-black text-gray-900 tracking-tight">營運看板中心</h2>
           <p className="text-xs text-gray-400 mt-0.5">即時店務數據與預約碰撞防禦排班表</p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-white border border-gray-100 p-1 rounded-xl shadow-sm w-full sm:w-auto justify-between sm:justify-start">
-          <button onClick={() => navigateWeek(-1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">← 上一週</button>
-          <span className="text-xs font-bold px-3">週視圖</span>
-          <button onClick={() => navigateWeek(1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">下一週 →</button>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+          {/* 💡 4. 美甲師切換下拉選單 */}
+          <select
+            value={selectedProviderId}
+            onChange={(e) => setSelectedProviderId(e.target.value)}
+            className="px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white shadow-sm focus:border-black focus:outline-none"
+          >
+            <option value="all">全店總覽</option>
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center space-x-2 bg-white border border-gray-100 p-1 rounded-xl shadow-sm">
+            <button onClick={() => navigateWeek(-1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">← 上一週</button>
+            <span className="text-xs font-bold px-3">週視圖</span>
+            <button onClick={() => navigateWeek(1)} className="p-2 hover:bg-gray-50 rounded-lg font-bold text-xs text-gray-400 hover:text-gray-700">下一週 →</button>
+          </div>
         </div>
       </header>
 
@@ -167,7 +181,6 @@ const AdminCalendarView = () => {
                             ⏱ {app.start_time.substring(11, 16)}
                           </p>
 
-                          {/* 💡 2. 核心修復：週曆卡片支援多選服務名稱串接 */}
                           <p className="text-sm md:text-xs font-bold truncate mt-1">
                             {app.services && app.services.length > 0
                               ? app.services.map(s => s.name).join(' ＋ ')
@@ -221,14 +234,12 @@ const AdminCalendarView = () => {
 
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
                   <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
-                  {/* 主服務項目 */}
                   <p className="font-black text-gray-800 text-base mb-2">
                     {selectedAppointment.services && selectedAppointment.services.length > 0
                       ? selectedAppointment.services.map(s => s.name).join(' ＋ ')
                       : (selectedAppointment.service?.name || selectedAppointment.service_name || '未指定主服務')}
                   </p>
 
-                  {/* 加購項目列表 */}
                   {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
                     <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2.5 rounded-xl space-y-1 border border-amber-100/50">
                       {selectedAppointment.addons.map(a => (
@@ -287,9 +298,6 @@ const AdminCalendarView = () => {
 
       </div>
 
-      {/* ==========================================
-        📦 共享模組：聯合編輯 Modal
-        ========================================== */}
       {isEditModalOpen && (
         <AppointmentEditModal
           isOpen={true}

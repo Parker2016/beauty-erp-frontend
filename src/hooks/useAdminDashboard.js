@@ -8,6 +8,9 @@ export const useAdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  const [providers, setProviders] = useState([]);
+  const [selectedProviderId, setSelectedProviderId] = useState('all');
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
@@ -40,31 +43,43 @@ export const useAdminDashboard = () => {
     });
   }, [currentDate, getWeekRange]);
 
-  // 刷新核心數據
+  // 💡 2. 初始化載入美甲師清單
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const res = await adminService.getProviders();
+        setProviders(res.data || res);
+      } catch (err) {
+        console.error("載入美甲師清單失敗", err);
+      }
+    };
+    fetchProviders();
+  }, []);
+
+  // 刷新核心數據（💡 3. 將 selectedProviderId 帶入 API 請求）
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { monday, sunday } = getWeekRange(currentDate);
       
-      // ✅ 正名與參數微調：完全符合你 services/admin.js 的參數排列順序與預設 shop_id 邏輯
       const [statsRes, calendarRes] = await Promise.all([
-        adminService.getDashboardStats(1),
-        adminService.getCalendarAppointments(monday, sunday, 1)
+        adminService.getDashboardStats(1, selectedProviderId),       // 傳入 shop_id=1 與 provider_id
+        adminService.getCalendarAppointments(monday, sunday, 1, selectedProviderId) // 傳入 start, end, shop_id=1, provider_id
       ]);
       
-      setStats(statsRes);
-      setAppointments(calendarRes);
+      setStats(statsRes.data || statsRes);
+      setAppointments(calendarRes.data || calendarRes);
     } catch (err) {
       setError('載入後台數據失敗，請檢查後端連線。');
     } finally {
       setLoading(false);
     }
-  }, [currentDate, getWeekRange]);
+  }, [currentDate, getWeekRange, selectedProviderId]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [currentDate, fetchDashboardData]);
+  }, [currentDate, selectedProviderId, fetchDashboardData]);
 
   // 智慧預選
   useEffect(() => {
@@ -96,6 +111,9 @@ export const useAdminDashboard = () => {
     weekDays,
     selectedAppointment,
     setSelectedAppointment,
+    providers,
+    selectedProviderId,
+    setSelectedProviderId,
     navigateWeek,
     refreshData: fetchDashboardData
   };
