@@ -81,8 +81,10 @@ export const adminService = {
    * 取得全店所有美甲師/服務人員名冊
    * @returns {Promise<Array>} 美甲師物件列表
    */
-  getProviders: () => {
-    return http.get('providers/');
+  getProviders: (shopId = 1) => {
+    return http.get('providers/', {
+      params: { shop_id: shopId }
+    });
   },
 
   /**
