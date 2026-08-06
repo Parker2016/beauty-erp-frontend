@@ -218,14 +218,14 @@ const BookingPage = () => {
           <div className="space-y-6 animate-fade-in-up">
             <div>
               <h2 className="text-lg font-black text-gray-800">想預約什麼服務呢？ (可複選)</h2>
-              <p className="text-xs text-gray-400 mt-0.5">已指定美甲美療師：{selectedProvider.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">已指定美甲師：{selectedProvider.name}</p>
             </div>
 
             {/* 渲染輔助分組渲染器（手部 ➔ 足部 ➔ 純卸甲） */}
             {[
-              { title: "💅 手部造型/保養", list: handServices },
-              { title: "🩴 足部造型/保養", list: footServices },
-              { title: "🧼 純卸甲(保養)", list: pureRemovalServices }
+              { title: "手部造型", list: handServices },
+              { title: "足部造型", list: footServices },
+              { title: "純卸甲(保養)", list: pureRemovalServices }
             ].map((group, gIdx) => group.list.length > 0 && (
               <div key={gIdx} className="space-y-2">
                 <h3 className="text-xs font-black text-[#8c7654] tracking-wider bg-[#f4f1eb]/60 px-3 py-1.5 rounded-lg w-max">{group.title}</h3>
