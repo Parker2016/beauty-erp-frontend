@@ -3,11 +3,9 @@ import React, { useState } from 'react';
 import AppointmentWithRecordEditor from './AppointmentWithRecordEditor';
 import ServiceManagement from './ServiceManagement';
 import ProviderManagement from './ProviderManagement';
-// 💡 1. 引入設計款設定元件
 import DesignPriceSettings from './settings/DesignPriceSettings'; 
 
 const AdminManagement = () => {
-  // 開發中你可以先把它改成 useState('design_prices')，開發完再改回 appointments
   const [activeTab, setActiveTab] = useState('appointments'); 
 
   return (
