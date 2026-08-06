@@ -1,42 +1,29 @@
 // src/hooks/useBookingFlow.js
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { bookingService } from '../services/booking';
 
 export const useBookingFlow = () => {
-  // ==========================================
-  // 1. 核心系統數據狀態
-  // ==========================================
   const [providers, setProviders] = useState([]);
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 時間空檔獨立狀態
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
-  // ==========================================
-  // 2. 6 步預約流程狀態機
-  // ==========================================
-  const [step, setStep] = useState(1);
+  // 💡 1. 統一由 Hook 託管：0毫秒記憶體鎖 + 全螢幕遮罩 State
+  const isSubmitLockedRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 使用者填寫的個人資料狀態
+  const [step, setStep] = useState(1);
   const [customerData, setCustomerData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    birthday: '',
-    memo: ''
+    name: '', phone: '', email: '', birthday: '', memo: ''
   });
 
   const [selectedProvider, setSelectedProvider] = useState(null);
-  // 💡 核心變革 1：主服務由單選物件改為多選陣列
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedAddons, setSelectedAddons] = useState([]);
 
-  // ==========================================
-  // 3. 資料初始化掛載
-  // ==========================================
   useEffect(() => {
     const fetchProviders = async () => {
       setIsLoading(true);
@@ -52,18 +39,12 @@ export const useBookingFlow = () => {
     fetchProviders();
   }, []);
 
-  // ==========================================
-  // 4. 各步驟精準控制方法 (暴露給 UI 使用)
-  // ==========================================
-
-  // 步驟 1 ➔ 2：提交客戶基本資料
   const submitCustomerData = (data) => {
     setCustomerData(data);
     setStep(2);
     setError(null);
   };
 
-  // 步驟 2 ➔ 3：選定美甲師
   const selectProvider = async (provider) => {
     setSelectedProvider(provider);
     setIsLoading(true);
@@ -71,8 +52,8 @@ export const useBookingFlow = () => {
     try {
       const data = await bookingService.getServicesByProvider(provider.id);
       setServices(data);
-      setSelectedServices([]); // 清空上一次選的主服務
-      setSelectedAddons([]);   // 清空上一次選的加購項
+      setSelectedServices([]);
+      setSelectedAddons([]);
       setStep(3);
     } catch (err) {
       setError('無法載入該美甲師的造型服務項目，請換人試試或稍後再試。');
@@ -81,67 +62,45 @@ export const useBookingFlow = () => {
     }
   };
 
-  // 💡 核心變革 2：步驟 3 專用 — 切換主服務項目的勾選狀態 (M2M 多選邏輯)
   const toggleService = (serviceItem) => {
     setSelectedServices(prev => {
       const isExist = prev.some(item => item.id === serviceItem.id);
-      if (isExist) {
-        return prev.filter(item => item.id !== serviceItem.id);
-      } else {
-        return [...prev, serviceItem];
-      }
+      return isExist ? prev.filter(item => item.id !== serviceItem.id) : [...prev, serviceItem];
     });
   };
 
-  // 💡 核心變革 3：步驟 3 ➔ 4 — 確認主服務 (需防呆確認至少選 1 項) 並前往加購區
   const confirmServicesAndGoToAddons = () => {
     if (selectedServices.length === 0) {
       setError('請至少選擇一項主服務造型項目。');
       return;
     }
-    setStep(4); // 跳轉至加購項目區
+    setStep(4);
     setError(null);
-    setSelectedAddons([]); // 清空加購項
-    setAvailableSlots([]);  // 清空時段快取
+    setSelectedAddons([]);
+    setAvailableSlots([]);
   };
 
-  // 步驟 4 專用：切換加購項目的勾選狀態 (M2M 多選邏輯)
   const toggleAddon = (addonItem) => {
     setSelectedAddons(prev => {
       const isExist = prev.some(item => item.id === addonItem.id);
-      if (isExist) {
-        return prev.filter(item => item.id !== addonItem.id);
-      } else {
-        return [...prev, addonItem];
-      }
+      return isExist ? prev.filter(item => item.id !== addonItem.id) : [...prev, addonItem];
     });
   };
 
-  // 步驟 4 ➔ 5：確認加購項，前往時間排班表
   const confirmAddonsAndGoToCalendar = () => {
     setStep(5);
     setError(null);
   };
 
-  // ==========================================
-  // 5. 核心異步：串接多選主服務與加購時間的可用時段計算
-  // ==========================================
   const fetchAvailableSlots = useCallback(async (providerId, dateString) => {
     setIsSlotsLoading(true);
     setError(null);
     try {
       const serviceIds = (selectedServices || []).map(s => s.id);
       const addonIds = (selectedAddons || []).map(a => a.id);
-
-      // 1. 呼叫 API (對齊參數順序: providerId, serviceIds, dateString, addonIds)
       const res = await bookingService.getAvailableSlots(providerId, serviceIds, dateString, addonIds);
 
-      // 💡 2. 萬能相容：如果 http.js 已經解包，res 就是陣列；如果沒解包，資料在 res.data 裡
-      const rawSlots = Array.isArray(res)
-        ? res
-        : (Array.isArray(res?.data) ? res.data : []);
-
-      // 💡 3. 時間格式轉換："2026-07-29T10:00:00+08:00" ➔ "10:00"
+      const rawSlots = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
       const pureTimes = rawSlots
         .map(slot => (slot?.start_time ? slot.start_time.substring(11, 16) : null))
         .filter(Boolean);
@@ -157,39 +116,65 @@ export const useBookingFlow = () => {
   }, [selectedServices, selectedAddons]);
 
   // ==========================================
-  // 6. 最終決策：提交最終總訂單給 Django
+  // 💡 2. 完美的防爆連點邏輯（核心修復點）
   // ==========================================
   const submitBooking = async (startTime, liffUser) => {
-    setIsLoading(true);
+    // 🛑 如果已經在處理中，直接 0 毫秒 return，且「絕對不去修改 isSubmitting」！
+    if (isSubmitLockedRef.current) {
+      console.warn('⚠️ [防爆連點] 點擊過快，第二次請求被源頭鎖成功攔截！');
+      return false;
+    }
+
+    // 🔒 瞬間鎖定記憶體與開啓全螢幕遮罩
+    isSubmitLockedRef.current = true;
+    setIsSubmitting(true);
     setError(null);
+
     try {
       const serviceIds = selectedServices.map(s => s.id);
       const addonIds = selectedAddons.map(a => a.id);
-
-      // 💡 取得 LINE UID (若在 LINE LIFF 環境中可動態抓取，若無則預設或帶入暫存值)
-      const currentLineUid = window.liff?.getContext?.()?.userId || customerData.lineUid || `line_user_${Date.now()}`;
 
       const payload = {
         provider_id: selectedProvider.id,
         service_ids: serviceIds,
         addon_ids: addonIds,
-        line_uid: liffUser.lineUid,
-        customer_name: customerData.name,         // 對應 customer_name
-        customer_phone: customerData.phone,       // 對應 customer_phone
-        customer_email: customerData.email || '', // 對應 customer_email (選填)
+        line_uid: liffUser?.lineUid || `line_user_${Date.now()}`,
+        customer_name: customerData.name,
+        customer_phone: customerData.phone,
+        customer_email: customerData.email || '',
         start_time: startTime,
         memo: `[客戶聯絡資料]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n生日: ${customerData.birthday || '未填'}\n\n[客人客製備註]\n${customerData.memo || '無'}`
       };
 
       await bookingService.createAppointment(payload);
+      
+      // 成功：進入 Step 6（保持遮罩關閉，步驟切換）
       setStep(6);
       return true;
+
     } catch (err) {
-      const errorMsg = err.response?.data?.start_time || err.response?.data?.service_ids || '預約失敗，這個時段剛剛被別人搶先一步劃走了！';
+      console.error('❌ 預約失敗:', err);
+      
+      const rawErr = err.response?.data;
+      let errorMsg = '預約失敗，這個時段剛剛被別人搶先一步劃走了！';
+
+      if (typeof rawErr === 'string') {
+        errorMsg = rawErr;
+      } else if (rawErr?.detail) {
+        errorMsg = rawErr.detail;
+      } else if (rawErr?.start_time) {
+        errorMsg = Array.isArray(rawErr.start_time) ? rawErr.start_time[0] : rawErr.start_time;
+      } else if (rawErr?.non_field_errors) {
+        errorMsg = Array.isArray(rawErr.non_field_errors) ? rawErr.non_field_errors[0] : rawErr.non_field_errors;
+      }
+
       setError(errorMsg);
       return false;
+
     } finally {
-      setIsLoading(false);
+      // 💡 只有當「第一次請求結束」時，才解開記憶體鎖與遮罩！
+      isSubmitLockedRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -199,6 +184,8 @@ export const useBookingFlow = () => {
   };
 
   const resetFlow = () => {
+    isSubmitLockedRef.current = false;
+    setIsSubmitting(false);
     setStep(1);
     setCustomerData({ name: '', phone: '', email: '', birthday: '', memo: '' });
     setSelectedProvider(null);
@@ -208,27 +195,25 @@ export const useBookingFlow = () => {
     setError(null);
   };
 
-  // ==========================================
-  // 7. 將大腦全數對外釋放解構
-  // ==========================================
   return {
     providers,
     services,
     isLoading,
+    isSubmitting, // 💡 匯出給 UI 使用
     error,
     step,
     setStep,
     customerData,
     selectedProvider,
-    selectedServices,             // 💡 釋放多選主服務陣列
+    selectedServices,
     selectedAddons,
     availableSlots,
     isSlotsLoading,
     fetchAvailableSlots,
     submitCustomerData,
     selectProvider,
-    toggleService,                // 💡 釋放步驟 3 的勾選切換函式
-    confirmServicesAndGoToAddons, // 💡 釋放步驟 3 的下一步確認按鈕函式
+    toggleService,
+    confirmServicesAndGoToAddons,
     toggleAddon,
     confirmAddonsAndGoToCalendar,
     submitBooking,

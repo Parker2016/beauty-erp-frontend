@@ -3,33 +3,36 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
 import { useLiffAuth } from '../hooks/useLiffAuth';
 
+// 💡 模組級全域鎖：獨立於 React 生命週期與 State 重繪之外，0 毫秒同步卡死連點
+let isGlobalSubmitting = false;
+
 const BookingPage = () => {
   const { liffUser, isLiffLoading } = useLiffAuth();
-  // ==========================================
-  // 1. 從自訂 Hook 解構出全新的多選動態狀態與控制大腦
-  // ==========================================
+  
+  // 從自訂 Hook 解構出全域狀態與控制大腦
   const { 
-    providers, services, isLoading, error, step, setStep,
-    selectedProvider, selectedServices, selectedAddons, // 💡 改為 selectedServices (多選陣列)
+    providers, services, isLoading, isSubmitting, error, step, setStep,
+    selectedProvider, selectedServices, selectedAddons,
     availableSlots, isSlotsLoading, fetchAvailableSlots,
-    submitCustomerData, selectProvider, toggleService, confirmServicesAndGoToAddons, // 💡 導入多選服務控制方法
+    submitCustomerData, selectProvider, toggleService, confirmServicesAndGoToAddons,
     toggleAddon, confirmAddonsAndGoToCalendar, submitBooking, resetFlow, goBack 
   } = useBookingFlow();
 
   // ==========================================
-  // 步驟 1：本地客戶表單暫存狀態 (下一步時才一口氣打包送出)
+  // 步驟 1：本地客戶表單暫存狀態 (姓名預設保持空白，由客人手動填寫真實姓名)
   // ==========================================
   const [localForm, setLocalForm] = useState({
     name: '',
     phone: '',
     email: '',
-    birthday: '', // 選填生日
+    birthday: '',
     memo: ''
   });
 
+  // 💡 修正：移除預填 LINE 顯示名稱 (liffUser.name)，僅在有取得 Email 時自動帶入 Email
   useEffect(() => {
-    if (liffUser.name && !localForm.name) {
-      setLocalForm(prev => ({ ...prev, name: liffUser.name, email: liffUser.email || prev.email }));
+    if (liffUser.email && !localForm.email) {
+      setLocalForm(prev => ({ ...prev, email: liffUser.email }));
     }
   }, [liffUser]);
 
@@ -40,11 +43,11 @@ const BookingPage = () => {
 
   const handleStep1Submit = (e) => {
     e.preventDefault();
-    if (!localForm.name || !localForm.phone) {
+    if (!localForm.name.trim() || !localForm.phone.trim()) {
       alert('請填寫姓名與電話！');
       return;
     }
-    submitCustomerData(localForm); // 送出並解鎖步驟 2
+    submitCustomerData(localForm);
   };
 
   // ==========================================
@@ -55,26 +58,21 @@ const BookingPage = () => {
   const [selectedDate, setSelectedDate] = useState(null); 
   const [selectedTime, setSelectedTime] = useState('');
 
-  // ==========================================
-  // 2. 核心連動：改在步驟 5 (選日期) 且主客觀條件充足時，呼叫 Django 計算多服務空檔
-  // ==========================================
+  // 核心連動：步驟 5 (選日期) 自動呼叫 Django 計算多服務空檔
   useEffect(() => {
     if (step === 5 && selectedDate && selectedProvider && selectedServices.length > 0) {
-      setSelectedTime(''); // 換日期就歸零時間
+      setSelectedTime('');
       
       const year = selectedDate.getFullYear();
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
       const day = String(selectedDate.getDate()).padStart(2, '0');
       const formattedDate = `${year}-${month}-${day}`;
       
-      // 💡 核心大腦會自動將選中的多項主服務與加購項陣列一起打包送去 Django 加總工時
       fetchAvailableSlots(selectedProvider.id, formattedDate);
     }
   }, [selectedDate, selectedProvider, selectedServices, step, fetchAvailableSlots]);
 
-  // ==========================================
-  // 3. 業務分類篩選器 (根據後端 category 分組主服務與加購)
-  // ==========================================
+  // 業務分類篩選器
   const mainServices = useMemo(() => {
     return services.filter(s => !s.is_addon && s.category !== 'ADDON');
   }, [services]); 
@@ -83,14 +81,11 @@ const BookingPage = () => {
     return services.filter(s => s.is_addon || s.category === 'ADDON');
   }, [services]);
 
-  // 按類別細分主服務，方便前端渲染
   const handServices = mainServices.filter(s => s.category === 'HAND');
   const footServices = mainServices.filter(s => s.category === 'FOOT');
   const pureRemovalServices = mainServices.filter(s => s.category === 'PURE_REMOVAL');
 
-  // ==========================================
-  // 4. 月曆矩陣核心計算 (不變)
-  // ==========================================
+  // 月曆矩陣核心計算
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -106,17 +101,57 @@ const BookingPage = () => {
   const isPast = (date) => date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   // ==========================================
-  // 5. 終極送出核銷
+  // 終極送出核銷 (原生 DOM + 模組鎖雙重防護)
   // ==========================================
-  const handleFinalSubmit = async () => {
-    if (!selectedDate || !selectedTime) return;
-    
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    
-    const startDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
-    await submitBooking(startDateTime, liffUser);
+  const handleFinalSubmit = async (e) => {
+    // 🛑 1. 第一道防線：模組級全域鎖 (0 毫秒攔截第二次點擊)
+    if (isGlobalSubmitting) {
+      console.warn('⛔ [防爆鎖] 手動連點被模組鎖攔截！');
+      return;
+    }
+
+    isGlobalSubmitting = true;
+
+    // 🛑 2. 第二道防線：DOM 節點物理切斷 (讓瀏覽器直接無視所有後續滑鼠點擊)
+    const btnTarget = e.currentTarget;
+    if (btnTarget) {
+      btnTarget.style.pointerEvents = 'none';
+      btnTarget.setAttribute('disabled', 'true');
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+
+    try {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const startDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
+
+      const isSuccess = await submitBooking(startDateTime, liffUser);
+
+      // 預約失敗時解鎖，允許客人更換時段重試
+      if (!isSuccess) {
+        isGlobalSubmitting = false;
+        if (btnTarget) {
+          btnTarget.style.pointerEvents = 'auto';
+          btnTarget.removeAttribute('disabled');
+        }
+      }
+    } catch (err) {
+      isGlobalSubmitting = false;
+      if (btnTarget) {
+        btnTarget.style.pointerEvents = 'auto';
+        btnTarget.removeAttribute('disabled');
+      }
+    }
+  };
+
+  // 重置流程時，同步解開全域鎖
+  const handleResetFlow = () => {
+    isGlobalSubmitting = false;
+    resetFlow();
   };
 
   // 全螢幕同步 Loading 阻斷器
@@ -136,6 +171,17 @@ const BookingPage = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
       
+      {/* 🔒 全螢幕霧面鎖定遮罩 */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white animate-fade-in px-6 pointer-events-none select-none">
+          <div className="bg-gray-900/90 p-6 rounded-2xl flex flex-col items-center space-y-3 shadow-2xl border border-white/10 max-w-xs text-center">
+            <div className="w-9 h-9 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+            <p className="text-sm font-black tracking-wide">正在為您鎖定預約時段...</p>
+            <p className="text-[11px] text-gray-300 font-medium leading-relaxed">請勿關閉或重新整理頁面，確保排班順序</p>
+          </div>
+        </div>
+      )}
+
       {/* 頂部導覽列 */}
       <header className="bg-white p-5 text-center shadow-sm sticky top-0 z-10 flex items-center border-b border-gray-50">
         {step > 1 && step < 6 && (
@@ -147,7 +193,12 @@ const BookingPage = () => {
         <span className="absolute right-5 text-[10px] font-mono bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Step {step}/6</span>
       </header>
 
-      {error && <div className="m-4 p-4 bg-red-50 text-red-500 rounded-xl text-xs font-bold leading-relaxed">{error}</div>}
+      {/* 互斥防護：只有在非成功頁面 (step < 6) 且有錯誤時，才渲染紅色錯誤提示 */}
+      {error && step < 6 && (
+        <div className="m-4 p-4 bg-red-50 text-red-500 rounded-xl text-xs font-bold leading-relaxed border border-red-100/60 animate-shake">
+          {error}
+        </div>
+      )}
 
       <main className="p-5">
         
@@ -160,7 +211,7 @@ const BookingPage = () => {
             </div>
             
             <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-600 block">您的稱呼 <span className="text-red-400">*</span></label>
+              <label className="text-xs font-bold text-gray-600 block">姓名 <span className="text-red-400">*</span></label>
               <input type="text" name="name" required value={localForm.name} onChange={handleInputChange} placeholder="請輸入您的真實姓名" className="w-full p-3 border border-gray-100 rounded-xl focus:outline-none focus:border-[#8c7654] bg-gray-50 text-sm font-medium" />
             </div>
 
@@ -213,7 +264,7 @@ const BookingPage = () => {
           </div>
         )}
 
-        {/* ================= 步驟 3：選擇主要項目 (Booking What - 升級可複選) ================= */}
+        {/* ================= 步驟 3：選擇主要項目 (Booking What - 可複選) ================= */}
         {step === 3 && selectedProvider && (
           <div className="space-y-6 animate-fade-in-up">
             <div>
@@ -221,7 +272,6 @@ const BookingPage = () => {
               <p className="text-xs text-gray-400 mt-0.5">已指定美甲師：{selectedProvider.name}</p>
             </div>
 
-            {/* 渲染輔助分組渲染器（手部 ➔ 足部 ➔ 純卸甲） */}
             {[
               { title: "手部造型", list: handServices },
               { title: "足部造型", list: footServices },
@@ -236,13 +286,11 @@ const BookingPage = () => {
                       <div 
                         key={s.id} 
                         onClick={() => toggleService(s)}
-                        /* 💡 M2M 多選卡片反白效果 */
                         className={`p-4 border rounded-xl shadow-sm cursor-pointer select-none transition-all active:scale-98 flex flex-col text-left
                           ${isChecked ? 'border-[#8c7654] bg-[#fdfbf7] shadow-md ring-1 ring-[#8c7654]' : 'border-gray-100 bg-white'}`}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-center space-x-2">
-                            {/* Checkbox 標示圖示 */}
                             <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all
                               ${isChecked ? 'bg-[#8c7654] border-[#8c7654] text-white' : 'border-gray-200 bg-gray-50'}`}>
                               {isChecked && <span className="text-[10px]">✓</span>}
@@ -403,10 +451,9 @@ const BookingPage = () => {
             <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">✓</div>
             <h2 className="text-xl font-black text-gray-800 mb-2">預約申請已送出！</h2>
             <p className="text-xs text-gray-500 mb-8 px-4 leading-relaxed">
-              您的預約與加購資料已成功打包拋送至後台排班管線。<br/>
               美甲師確認時段無誤後，系統將自動透過官方 LINE 向您發送「已確認」通知信！
             </p>
-            <button onClick={resetFlow} className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-md">
+            <button onClick={handleResetFlow} className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-md hover:bg-black transition-all active:scale-95">
               關閉頁面並返回首頁
             </button>
           </div>
@@ -414,13 +461,12 @@ const BookingPage = () => {
       </main>
 
       {/* ==========================================
-        📱 底部懸浮固定結帳條列 (僅在步驟 5 選時間時浮出)
+        📱 底部懸浮固定結帳條列 (動態按鈕 + Spinner + 多重鎖定)
         ========================================== */}
       {step === 5 && (
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white p-4 border-t border-gray-100 flex items-center space-x-3 shadow-[0_-8px_30px_rgba(0,0,0,0.03)] z-40">
           <div className="flex-1 min-w-0">
             <p className="text-[10px] text-gray-400 font-bold mb-0.5 uppercase tracking-wider">總預約內容摘要</p>
-            {/* 💡 核心優化：摘要多主服務拼接顯示 */}
             <p className="text-xs font-black text-gray-700 truncate">
               {selectedServices.map(s => s.name).join(' ＋ ')}
               {selectedAddons.length > 0 && ` (加購: ${selectedAddons.map(a => a.name).join(', ')})`}
@@ -429,14 +475,24 @@ const BookingPage = () => {
               {selectedDate ? `${selectedDate.getMonth()+1}/${selectedDate.getDate()}` : ''} {selectedTime || '⏱ 未選時段'}
             </p>
           </div>
+
           <button 
             type="button"
             onClick={handleFinalSubmit}
-            disabled={!selectedDate || !selectedTime || isSlotsLoading}
-            className={`px-6 py-3.5 rounded-xl font-bold text-xs text-white transition-all 
-              ${(!selectedDate || !selectedTime || isSlotsLoading) ? 'bg-gray-200 cursor-not-allowed' : 'bg-[#8c7654] shadow-md active:scale-95'}`}
+            disabled={!selectedDate || !selectedTime || isSlotsLoading || isSubmitting}
+            className={`px-5 py-3.5 rounded-xl font-bold text-xs text-white transition-all flex items-center justify-center space-x-2 shrink-0
+              ${(!selectedDate || !selectedTime || isSlotsLoading || isSubmitting) 
+                ? 'bg-gray-200 cursor-not-allowed opacity-75 pointer-events-none' 
+                : 'bg-[#8c7654] shadow-md active:scale-95 hover:bg-[#7a6648]'}`}
           >
-            確認預約送出 ➔
+            {isSubmitting ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>時段鎖定中...</span>
+              </>
+            ) : (
+              <span>確認預約送出 ➔</span>
+            )}
           </button>
         </div>
       )}

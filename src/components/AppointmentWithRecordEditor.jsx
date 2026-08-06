@@ -150,7 +150,7 @@ const AppointmentWithRecordEditor = () => {
                 onClick={() => openEditModal(app)}
                 className="w-full py-2.5 bg-[#f4f1eb] text-[#8c7654] font-bold text-xs rounded-xl active:scale-95 transition-all"
               >
-                開啟聯合編輯面板 ➔
+                開啟編輯面板 ➔
               </button>
             </div>
           );
