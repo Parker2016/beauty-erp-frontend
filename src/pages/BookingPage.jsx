@@ -8,14 +8,14 @@ let isGlobalSubmitting = false;
 
 const BookingPage = () => {
   const { liffUser, isLiffLoading } = useLiffAuth();
-  
+
   // 從自訂 Hook 解構出全域狀態與控制大腦
-  const { 
+  const {
     providers, services, isLoading, isSubmitting, error, step, setStep,
     selectedProvider, selectedServices, selectedAddons,
     availableSlots, isSlotsLoading, fetchAvailableSlots,
     submitCustomerData, selectProvider, toggleService, confirmServicesAndGoToAddons,
-    toggleAddon, confirmAddonsAndGoToCalendar, submitBooking, resetFlow, goBack 
+    toggleAddon, confirmAddonsAndGoToCalendar, submitBooking, resetFlow, goBack
   } = useBookingFlow();
 
   // ==========================================
@@ -55,19 +55,19 @@ const BookingPage = () => {
   // ==========================================
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState(null); 
+  const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState('');
 
   // 核心連動：步驟 5 (選日期) 自動呼叫 Django 計算多服務空檔
   useEffect(() => {
     if (step === 5 && selectedDate && selectedProvider && selectedServices.length > 0) {
       setSelectedTime('');
-      
+
       const year = selectedDate.getFullYear();
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
       const day = String(selectedDate.getDate()).padStart(2, '0');
       const formattedDate = `${year}-${month}-${day}`;
-      
+
       fetchAvailableSlots(selectedProvider.id, formattedDate);
     }
   }, [selectedDate, selectedProvider, selectedServices, step, fetchAvailableSlots]);
@@ -75,7 +75,7 @@ const BookingPage = () => {
   // 業務分類篩選器
   const mainServices = useMemo(() => {
     return services.filter(s => !s.is_addon && s.category !== 'ADDON');
-  }, [services]); 
+  }, [services]);
 
   const addonServices = useMemo(() => {
     return services.filter(s => s.is_addon || s.category === 'ADDON');
@@ -84,14 +84,15 @@ const BookingPage = () => {
   const handServices = mainServices.filter(s => s.category === 'HAND');
   const footServices = mainServices.filter(s => s.category === 'FOOT');
   const pureRemovalServices = mainServices.filter(s => s.category === 'PURE_REMOVAL');
+  const earServices = mainServices.filter(s => s.category === 'EAR');
 
   // 月曆矩陣核心計算
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1).getDay(); 
+    const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const startDayIndex = firstDay === 0 ? 6 : firstDay - 1; 
+    const startDayIndex = firstDay === 0 ? 6 : firstDay - 1;
     const days = Array(startDayIndex).fill(null);
     for (let i = 1; i <= daysInMonth; i++) { days.push(new Date(year, month, i)); }
     return days;
@@ -167,10 +168,10 @@ const BookingPage = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
-      
+
       {/* 🔒 全螢幕霧面鎖定遮罩 */}
       {isSubmitting && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white animate-fade-in px-6 pointer-events-none select-none">
@@ -201,7 +202,7 @@ const BookingPage = () => {
       )}
 
       <main className="p-5">
-        
+
         {/* ================= 步驟 1：填寫個人基本資料 ================= */}
         {step === 1 && (
           <form onSubmit={handleStep1Submit} className="space-y-4 animate-fade-in-up">
@@ -209,7 +210,7 @@ const BookingPage = () => {
               <h2 className="text-lg font-black text-gray-800">填寫預約聯絡人資訊</h2>
               <p className="text-xs text-gray-400 mt-0.5">請填寫正確真實資料，以便 LINE 通知管線對接</p>
             </div>
-            
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-600 block">姓名 <span className="text-red-400">*</span></label>
               <input type="text" name="name" required value={localForm.name} onChange={handleInputChange} placeholder="請輸入您的真實姓名" className="w-full p-3 border border-gray-100 rounded-xl focus:outline-none focus:border-[#8c7654] bg-gray-50 text-sm font-medium" />
@@ -249,7 +250,7 @@ const BookingPage = () => {
               <p className="text-xs text-gray-400 mt-0.5">點擊頭像即可直接指派</p>
             </div>
             {providers.map((p) => (
-              <div 
+              <div
                 key={p.id} onClick={() => selectProvider(p)}
                 className="flex items-center p-4 bg-white border border-gray-100 rounded-2xl shadow-sm cursor-pointer hover:border-[#8c7654] transition-all active:scale-95"
               >
@@ -269,30 +270,33 @@ const BookingPage = () => {
           <div className="space-y-6 animate-fade-in-up">
             <div>
               <h2 className="text-lg font-black text-gray-800">想預約什麼服務呢？ (可複選)</h2>
-              <p className="text-xs text-gray-400 mt-0.5">已指定美甲師：{selectedProvider.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">已指定服務人員：{selectedProvider.name}</p>
             </div>
 
             {[
-              { title: "手部造型", list: handServices },
-              { title: "足部造型", list: footServices },
-              { title: "純卸甲(保養)", list: pureRemovalServices }
-            ].map((group, gIdx) => group.list.length > 0 && (
+              { title: "手部美甲", list: handServices },
+              { title: "足部美甲", list: footServices },
+              { title: "純保養/純卸甲", list: pureRemovalServices },
+              { title: "采耳", list: earServices || [] } // 🆕 新增采耳分類群組
+            ].map((group, gIdx) => group.list && group.list.length > 0 && (
               <div key={gIdx} className="space-y-2">
-                <h3 className="text-xs font-black text-[#8c7654] tracking-wider bg-[#f4f1eb]/60 px-3 py-1.5 rounded-lg w-max">{group.title}</h3>
+                <h3 className="text-xs font-black text-[#8c7654] tracking-wider bg-[#f4f1eb]/60 px-3 py-1.5 rounded-lg w-max">
+                  {group.title}
+                </h3>
                 <div className="space-y-2.5">
                   {group.list.map((s) => {
                     const isChecked = selectedServices.some(item => item.id === s.id);
                     return (
-                      <div 
-                        key={s.id} 
+                      <div
+                        key={s.id}
                         onClick={() => toggleService(s)}
                         className={`p-4 border rounded-xl shadow-sm cursor-pointer select-none transition-all active:scale-98 flex flex-col text-left
-                          ${isChecked ? 'border-[#8c7654] bg-[#fdfbf7] shadow-md ring-1 ring-[#8c7654]' : 'border-gray-100 bg-white'}`}
+                  ${isChecked ? 'border-[#8c7654] bg-[#fdfbf7] shadow-md ring-1 ring-[#8c7654]' : 'border-gray-100 bg-white'}`}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-center space-x-2">
                             <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all
-                              ${isChecked ? 'bg-[#8c7654] border-[#8c7654] text-white' : 'border-gray-200 bg-gray-50'}`}>
+                      ${isChecked ? 'bg-[#8c7654] border-[#8c7654] text-white' : 'border-gray-200 bg-gray-50'}`}>
                               {isChecked && <span className="text-[10px]">✓</span>}
                             </div>
                             <h4 className="text-sm font-black text-gray-800">{s.name}</h4>
@@ -310,7 +314,7 @@ const BookingPage = () => {
               </div>
             ))}
 
-            <button 
+            <button
               type="button"
               onClick={confirmServicesAndGoToAddons}
               className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-md hover:bg-black transition-all active:scale-95"
@@ -358,7 +362,7 @@ const BookingPage = () => {
               <div className="text-center py-12 text-gray-300 text-xs font-medium">這位美甲師目前沒有開放可選的加購項目喔。</div>
             )}
 
-            <button 
+            <button
               type="button"
               onClick={confirmAddonsAndGoToCalendar}
               className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-md hover:bg-black transition-all active:scale-95"
@@ -372,7 +376,7 @@ const BookingPage = () => {
         {step === 5 && selectedServices.length > 0 && (
           <div className="animate-fade-in-up">
             <h2 className="text-base font-black text-gray-800 mb-4">挑選預約日期與時間</h2>
-            
+
             {/* 月曆切換控制器 */}
             <div className="flex justify-between items-center mb-4 text-xs font-bold bg-gray-50 p-2 rounded-xl border border-gray-100/50">
               <div className="flex items-center space-x-2">
@@ -380,7 +384,7 @@ const BookingPage = () => {
                 <span className="text-gray-800">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</span>
                 <button type="button" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 text-gray-400 hover:text-gray-700">&gt;</button>
               </div>
-              <button type="button" onClick={() => {setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(today);}} className="text-[#8c7654]">定位今天</button>
+              <button type="button" onClick={() => { setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(today); }} className="text-[#8c7654]">定位今天</button>
             </div>
 
             {/* 星期排頭 */}
@@ -396,10 +400,10 @@ const BookingPage = () => {
                 const past = isPast(dateObj);
                 return (
                   <div key={i} className="flex justify-center">
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => !past && setSelectedDate(dateObj)} 
-                      disabled={past} 
+                      onClick={() => !past && setSelectedDate(dateObj)}
+                      disabled={past}
                       className={`w-9 h-9 rounded-full font-bold transition-all text-xs flex items-center justify-center
                         ${active ? 'bg-gray-900 text-white shadow-md' : past ? 'text-gray-200 cursor-not-allowed' : 'text-gray-700 hover:bg-[#f4f1eb]'}`}
                     >
@@ -414,7 +418,7 @@ const BookingPage = () => {
             {selectedDate && (
               <div className="mt-4 border-t border-gray-50 pt-4">
                 <p className="text-gray-400 text-xs mb-3 font-medium">
-                  📅 {selectedDate.getMonth()+1}月{selectedDate.getDate()}日 可指派時間空檔
+                  📅 {selectedDate.getMonth() + 1}月{selectedDate.getDate()}日 可指派時間空檔
                 </p>
 
                 {isSlotsLoading ? (
@@ -424,10 +428,10 @@ const BookingPage = () => {
                 ) : availableSlots.length > 0 ? (
                   <div className="grid grid-cols-3 gap-2">
                     {availableSlots.map(time => (
-                      <button 
-                        key={time} 
+                      <button
+                        key={time}
                         type="button"
-                        onClick={() => setSelectedTime(time)} 
+                        onClick={() => setSelectedTime(time)}
                         className={`py-2.5 rounded-xl border font-bold transition-all text-xs font-mono
                           ${selectedTime === time ? 'border-[#8c7654] bg-[#f4f1eb] text-[#8c7654]' : 'border-gray-100 bg-white text-gray-500 hover:border-amber-200'}`}
                       >
@@ -437,7 +441,7 @@ const BookingPage = () => {
                   </div>
                 ) : (
                   <div className="text-center py-8 bg-gray-50 rounded-xl text-gray-400 text-xs px-4 leading-relaxed border border-gray-100/50">
-                    抱歉！當天因加上多項服務工時，剩餘空檔不足 😭<br/>請嘗試更換日期或其他時段！
+                    抱歉！當天因加上多項服務工時，剩餘空檔不足 😭<br />請嘗試更換日期或其他時段！
                   </div>
                 )}
               </div>
@@ -472,17 +476,17 @@ const BookingPage = () => {
               {selectedAddons.length > 0 && ` (加購: ${selectedAddons.map(a => a.name).join(', ')})`}
             </p>
             <p className="text-[11px] font-mono text-[#8c7654] font-bold mt-0.5">
-              {selectedDate ? `${selectedDate.getMonth()+1}/${selectedDate.getDate()}` : ''} {selectedTime || '⏱ 未選時段'}
+              {selectedDate ? `${selectedDate.getMonth() + 1}/${selectedDate.getDate()}` : ''} {selectedTime || '⏱ 未選時段'}
             </p>
           </div>
 
-          <button 
+          <button
             type="button"
             onClick={handleFinalSubmit}
             disabled={!selectedDate || !selectedTime || isSlotsLoading || isSubmitting}
             className={`px-5 py-3.5 rounded-xl font-bold text-xs text-white transition-all flex items-center justify-center space-x-2 shrink-0
-              ${(!selectedDate || !selectedTime || isSlotsLoading || isSubmitting) 
-                ? 'bg-gray-200 cursor-not-allowed opacity-75 pointer-events-none' 
+              ${(!selectedDate || !selectedTime || isSlotsLoading || isSubmitting)
+                ? 'bg-gray-200 cursor-not-allowed opacity-75 pointer-events-none'
                 : 'bg-[#8c7654] shadow-md active:scale-95 hover:bg-[#7a6648]'}`}
           >
             {isSubmitting ? (
