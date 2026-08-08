@@ -1,15 +1,30 @@
 // src/hooks/useAdminDashboard.js
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminService } from '../services/admin'; 
+import { useAuth } from './useAuth'; // 💡 1. 引入 useAuth
 
 export const useAdminDashboard = () => {
+  const { user, isManager } = useAuth(); // 💡 2. 取得目前登入使用者與店長權限
+
   const [stats, setStats] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
   const [providers, setProviders] = useState([]);
-  const [selectedProviderId, setSelectedProviderId] = useState('all');
+
+  const [selectedProviderId, setSelectedProviderId] = useState(() => {
+    if (!isManager && user?.provider_id) {
+      return String(user.provider_id);
+    }
+    return 'all';
+  });
+
+  useEffect(() => {
+    if (!isManager && user?.provider_id) {
+      setSelectedProviderId(String(user.provider_id));
+    }
+  }, [isManager, user]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -43,7 +58,7 @@ export const useAdminDashboard = () => {
     });
   }, [currentDate, getWeekRange]);
 
-  // 💡 2. 初始化載入美甲師清單
+  // 初始化載入美甲師清單
   useEffect(() => {
     const fetchProviders = async () => {
       try {
@@ -56,7 +71,7 @@ export const useAdminDashboard = () => {
     fetchProviders();
   }, []);
 
-  // 刷新核心數據（💡 3. 將 selectedProviderId 帶入 API 請求）
+  // 刷新核心數據
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
