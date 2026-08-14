@@ -27,37 +27,53 @@ export const useProviderShifts = () => {
 
     /**
      * 2. 整月批次排班 (核心功能)
-     * 讓店長輸入年份、月份、預設上下班時間與固定公休幾幾，瞬間產生整月陣列並儲存
+     * 支援直接傳入 shifts 陣列 (支援週一至週日獨立範本)，或傳入年月參數自動產生
      */
-    const batchGenerateMonthShifts = async ({ providerId, year, month, defaultStart = "11:30", defaultEnd = "20:00", restDaysOfWeek = [] }) => {
+    const batchGenerateMonthShifts = async ({
+        providerId,
+        shifts: incomingShifts, // 💡 優先接收前端已產生的班表陣列
+        year,
+        month,
+        defaultStart = "11:00",
+        defaultEnd = "19:00",
+        restDaysOfWeek = []
+    }) => {
         if (!providerId) {
-            alert("請先選擇美甲師！");
+            alert("請先選擇服務人員！");
             return false;
         }
 
         setSaving(true);
         try {
             let batchItems = [];
-            // 取得該月總天數 (利用 JS Date 的特性：傳入 0 代表取得上個月最後一天，即該月總天數)
-            const daysInMonth = new Date(year, month, 0).getDate();
 
-            for (let day = 1; day <= daysInMonth; day++) {
-                // 組裝成 YYYY-MM-DD
-                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                
-                // 判斷這一天是不是固定公休 (0 代表週日，1 代表週一...)
-                const dayOfWeek = new Date(dateStr).getDay();
-                const isOff = restDaysOfWeek.includes(dayOfWeek);
+            // 💡 情況 A：前端 Modal 已經依據週範本產生好 shifts 陣列，直接使用
+            if (incomingShifts && Array.isArray(incomingShifts) && incomingShifts.length > 0) {
+                batchItems = incomingShifts;
+            } 
+            // 💡 情況 B：向下相容舊寫法（傳入年月與單一時間）
+            else if (year && month) {
+                const daysInMonth = new Date(year, month, 0).getDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateObj = new Date(year, month - 1, day);
+                    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const dayOfWeek = dateObj.getDay();
+                    const isOff = restDaysOfWeek.includes(dayOfWeek);
 
-                batchItems.push({
-                    date: dateStr,
-                    start_time: isOff ? null : defaultStart,
-                    end_time: isOff ? null : defaultEnd,
-                    is_off: isOff
-                });
+                    batchItems.push({
+                        date: dateStr,
+                        start_time: isOff ? null : defaultStart,
+                        end_time: isOff ? null : defaultEnd,
+                        is_off: isOff,
+                        break_times: []
+                    });
+                }
+            } else {
+                alert("缺少排班資料或年月參數！");
+                return false;
             }
 
-            // 發送批次 API
+            // 發送批次 API（呼叫後端 bulk_update/bulk_create 最佳化後的 endpoint）
             await adminService.batchSaveShifts({
                 provider_id: providerId,
                 shifts: batchItems
@@ -67,7 +83,7 @@ export const useProviderShifts = () => {
             return true;
         } catch (error) {
             console.error("批次排班失敗", error);
-            alert("批次排班儲存失敗，請檢查網路。");
+            alert("批次排班儲存失敗，請檢查網路連線。");
             return false;
         } finally {
             setSaving(false);
@@ -75,12 +91,11 @@ export const useProviderShifts = () => {
     };
 
     /**
-     * 3. 單日快速修改 (臨時調整某天上下班或請假)
+     * 3. 單日快速修改 (臨時調整某天上下班、休息時段或請假)
      */
     const updateSingleShift = async (providerId, dateStr, shiftData) => {
         setSaving(true);
         try {
-            // 因為後端 batch API 的 update_or_create 支援單筆或多筆，我們直接包裝帶入陣列即可
             await adminService.batchSaveShifts({
                 provider_id: providerId,
                 shifts: [{
@@ -88,7 +103,7 @@ export const useProviderShifts = () => {
                     is_off: shiftData.is_off,
                     start_time: shiftData.is_off ? null : shiftData.start_time,
                     end_time: shiftData.is_off ? null : shiftData.end_time,
-                    break_times: shiftData.is_off ? [] : (shiftData.break_times || []) // 💡 確保這裡也有接收
+                    break_times: shiftData.is_off ? [] : (shiftData.break_times || [])
                 }]
             });
             return true;

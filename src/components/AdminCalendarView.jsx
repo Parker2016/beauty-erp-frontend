@@ -1,9 +1,11 @@
 // src/components/AdminCalendarView.jsx
 import React, { useState, useEffect } from 'react';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
+import { useAuth } from '../hooks/useAuth';
 import AppointmentEditModal from './AppointmentEditModal';
 
 const AdminCalendarView = () => {
+  const { user: currentUser, isManager } = useAuth();
   const {
     stats, appointments, loading, weekDays,
     selectedAppointment, setSelectedAppointment, navigateWeek,
@@ -30,7 +32,7 @@ const AdminCalendarView = () => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
-    
+
     return appointments.filter(app => app.start_time.startsWith(dateStr));
   };
 
@@ -51,12 +53,12 @@ const AdminCalendarView = () => {
 
   const totalDuration = selectedAppointment
     ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) +
-      (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
+    (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
     : 0;
 
   const systemTotal = selectedAppointment
     ? (selectedAppointment.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
-      (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
+    (selectedAppointment.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0)
     : 0;
 
   if (loading && weekDays.length === 0) return <div className="text-center py-20 text-sm text-gray-400">行事曆同步中...</div>;
@@ -71,16 +73,28 @@ const AdminCalendarView = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-          {/* 💡 4. 美甲師切換下拉選單 */}
+
+          {/* 💡 根據身分權限切換下拉選單顯示 */}
           <select
             value={selectedProviderId}
             onChange={(e) => setSelectedProviderId(e.target.value)}
-            className="px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white shadow-sm focus:border-black focus:outline-none"
+            disabled={!isManager} // 💡 員工登入時直接禁用選單切換
+            className="px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white shadow-sm focus:border-black focus:outline-none disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
           >
-            <option value="all">全店總覽</option>
-            {providers.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {isManager ? (
+              <>
+                <option value="all">全店總覽</option>
+                {providers.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </>
+            ) : (
+              providers
+                .filter(p => String(p.id) === String(currentUser?.provider_id))
+                .map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))
+            )}
           </select>
 
           <div className="flex items-center space-x-2 bg-white border border-gray-100 p-1 rounded-xl shadow-sm">

@@ -10,7 +10,7 @@ const ProviderManagement = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+
   // 表單專用狀態
   const [editingId, setEditingId] = useState(null); // null 代表新增，有值代表正在修改該 ID
   const [formData, setFormData] = useState({
@@ -69,7 +69,7 @@ const ProviderManagement = () => {
         };
         await adminService.createProvider(payload);
       }
-      
+
       setIsModalOpen(false);
       await loadProviders(); // 成功後向伺服器重撈最新資料，確保全域資料對齊！
     } catch (err) {
@@ -95,18 +95,18 @@ const ProviderManagement = () => {
 
   return (
     <div className="animate-fade-in text-left">
-      
+
       {/* 頂部操作列：標題與新增按鈕 */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h3 className="text-base font-black text-gray-800">店內美師名冊</h3>
-          <p className="text-xs text-gray-400 mt-0.5">目前共編制 {providers.length} 位人員</p>
+          <h3 className="text-base font-black text-gray-800">店內人員名冊</h3>
+          <p className="text-xs text-gray-400 mt-0.5">目前共 {providers.length} 位人員</p>
         </div>
         <button
           onClick={openAddModal}
           className="px-4 py-2.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-gray-800 transition-all active:scale-95"
         >
-          ＋ 新增服務人員
+          ＋ 新增人員
         </button>
       </div>
 
@@ -115,40 +115,37 @@ const ProviderManagement = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {providers.map((p) => (
-            <div 
+            <div
               key={p.id}
-              className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col justify-between hover:border-amber-200 transition-all"
+              className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm flex items-center justify-between hover:border-amber-200 transition-all"
             >
-              <div className="flex items-center space-x-4 mb-4">
+              {/* 左側：大頭貼 + 人員名稱與身分標籤 */}
+              <div className="flex items-center space-x-4">
                 {/* 大頭貼縮圖 */}
-                <div className="w-12 h-12 rounded-full bg-[#f4f1eb] text-[#8c7654] font-black flex items-center justify-center text-lg shadow-inner">
+                <div className="w-12 h-12 rounded-full bg-[#f4f1eb] text-[#8c7654] font-black flex items-center justify-center text-lg shadow-inner shrink-0">
                   {p.name.charAt(0)}
                 </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h4 className="font-black text-gray-800 text-base">{p.name}</h4>
-                    {/* 店長標籤狀態 */}
-                    {p.is_manager ? (
-                      <span className="text-[10px] bg-amber-50 text-amber-700 font-extrabold px-1.5 py-0.5 rounded-md border border-amber-200/40">店長</span>
-                    ) : (
-                      <span className="text-[10px] bg-gray-50 text-gray-400 font-medium px-1.5 py-0.5 rounded-md">美療師</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    已綁定 ⏱ {p.services?.length || 0} 項服務
-                  </p>
+
+                <div className="flex items-center space-x-2">
+                  <h4 className="font-black text-gray-800 text-base">{p.name}</h4>
+                  {/* 店長 / 美甲師 標籤狀態 */}
+                  {p.is_manager ? (
+                    <span className="text-[10px] bg-amber-50 text-amber-700 font-extrabold px-1.5 py-0.5 rounded-md border border-amber-200/40">店長</span>
+                  ) : (
+                    <span className="text-[10px] bg-gray-50 text-gray-400 font-medium px-1.5 py-0.5 rounded-md">美甲師</span>
+                  )}
                 </div>
               </div>
 
-              {/* 卡片底部按鈕區 */}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-gray-50 text-xs">
-                <button 
+              {/* 右側：平行的編輯與刪除按鈕 */}
+              <div className="flex items-center space-x-2 text-xs">
+                <button
                   onClick={() => openEditModal(p)}
                   className="px-3 py-1.5 text-[#8c7654] font-bold bg-[#f4f1eb] hover:bg-[#ebd9c1] rounded-lg transition-colors"
                 >
-                  編輯改制
+                  編輯
                 </button>
-                <button 
+                <button
                   onClick={() => handleDelete(p.id)}
                   className="px-3 py-1.5 text-red-500 font-bold hover:bg-red-50 rounded-lg transition-colors"
                 >
@@ -167,7 +164,7 @@ const ProviderManagement = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="absolute inset-0" onClick={() => !isSubmitting && setIsModalOpen(false)} />
 
-          <form 
+          <form
             onSubmit={handleSaveSubmit}
             className="bg-white rounded-3xl w-full max-w-sm p-6 relative z-10 shadow-2xl animate-fade-in-up text-left"
           >
@@ -179,8 +176,8 @@ const ProviderManagement = () => {
               {/* 欄位 1：姓名 */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500 block">美甲師稱呼 <span className="text-red-400">*</span></label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="請輸入美甲師名字 (例: Zoe)"
                   value={formData.name}
@@ -195,14 +192,14 @@ const ProviderManagement = () => {
                   <label className="text-xs font-bold text-gray-700 block">升任店長權限</label>
                   <p className="text-[11px] text-gray-400 mt-0.5">店長帳號未來擁有檢視全店營業額的權限</p>
                 </div>
-                
+
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, is_manager: !prev.is_manager }))}
                   className={`w-11 h-6 rounded-full relative transition-colors duration-300 focus:outline-none
                     ${formData.is_manager ? 'bg-amber-600' : 'bg-gray-200'}`}
                 >
-                  <div 
+                  <div
                     className={`w-5 h-5 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm transition-transform duration-300
                       ${formData.is_manager ? 'translate-x-5' : 'translate-x-0'}`}
                   />
@@ -212,7 +209,7 @@ const ProviderManagement = () => {
 
             {/* Modal 底部按鈕 */}
             <div className="flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-50 text-xs font-bold">
-              <button 
+              <button
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => setIsModalOpen(false)}
@@ -220,7 +217,7 @@ const ProviderManagement = () => {
               >
                 取消
               </button>
-              <button 
+              <button
                 type="submit"
                 disabled={isSubmitting}
                 className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 shadow-sm disabled:bg-gray-400"

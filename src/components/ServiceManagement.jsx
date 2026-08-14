@@ -20,9 +20,10 @@ const ServiceManagement = () => {
   // 💡 輔助函式：動態渲染類別標籤顏色
   const renderCategoryBadge = (category) => {
     const mapping = {
-      'HAND': { label: '手部服務', className: 'bg-pink-50 text-pink-600 border-pink-100' },
-      'FOOT': { label: '足部服務', className: 'bg-purple-50 text-purple-600 border-purple-100' },
-      'PURE_REMOVAL': { label: '純卸甲', className: 'bg-blue-50 text-blue-600 border-blue-100' },
+      'HAND': { label: '手部美甲', className: 'bg-pink-50 text-pink-600 border-pink-100' },
+      'FOOT': { label: '足部美甲', className: 'bg-purple-50 text-purple-600 border-purple-100' },
+      'PURE_REMOVAL': { label: '純保養/純卸甲', className: 'bg-blue-50 text-blue-600 border-blue-100' },
+      'EAR': { label: '采耳', className: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
       'ADDON': { label: '加購項目', className: 'bg-amber-50 text-amber-700 border-amber-200' },
     };
     const target = mapping[category] || { label: category, className: 'bg-gray-50 text-gray-600 border-gray-100' };
@@ -35,9 +36,9 @@ const ServiceManagement = () => {
       <div className="flex justify-between items-center bg-[#f4f1eb]/30 p-4 rounded-2xl border border-[#e8e3d9]/40">
         <div>
           <h3 className="text-lg font-black text-gray-800">服務品項管理</h3>
-          <p className="text-xs text-gray-400 mt-0.5">定義店內核心服務項目、定價與綁定專門美業師</p>
+          <p className="text-xs text-gray-400 mt-0.5">定義店內服務項目、定價與綁定特定人員</p>
         </div>
-        <button 
+        <button
           onClick={openCreateModal}
           className="bg-[#8c7654] text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-[#736144] transition-all shadow-sm"
         >
@@ -122,7 +123,7 @@ const ServiceManagement = () => {
         ))}
       </div>
 
-      <ServiceItemModal 
+      <ServiceItemModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         formData={formData}

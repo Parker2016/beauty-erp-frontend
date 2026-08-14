@@ -27,19 +27,19 @@ const AdminManagement = () => {
           onClick={() => setActiveTab('providers')}
           className={`px-4 py-2 rounded-lg font-bold text-xs transition-all shrink-0 ${activeTab === 'providers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
         >
-          服務人員管理 (Providers)
+          人員管理
         </button>
         <button 
           onClick={() => setActiveTab('services')}
           className={`px-4 py-2 rounded-lg font-bold text-xs transition-all shrink-0 ${activeTab === 'services' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
         >
-          服務品項上架 (Services)
+          服務品項上架
         </button>
         <button 
           onClick={() => setActiveTab('design_prices')}
           className={`px-4 py-2 rounded-lg font-bold text-xs transition-all shrink-0 ${activeTab === 'design_prices' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
         >
-          💅 設計款價目設定
+          設計款價目設定
         </button>
       </div>
 

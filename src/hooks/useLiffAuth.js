@@ -11,30 +11,37 @@ export const useLiffAuth = () => {
   const [isLiffLoading, setIsLiffLoading] = useState(true);
 
   useEffect(() => {
-    // setLiffUser({
-    //   lineUid: "local_test_uid_999",
-    //   name: "測試貴賓",
-    //   email: "test@example.com",
-    //   isLoggedIn: true
-    // });
-    // setIsLiffLoading(false);
-    
-    // 💡 填入你在 LINE Developers Console 申請的 LIFF ID
+    const isDevelopment = 
+      import.meta.env.DEV || 
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1';
+
+    if (isDevelopment) {
+      console.log('[Mock LIFF] 偵測到本地測試環境，已自動啟用 Mock 身份並跳過 LIFF 重定向。');
+      
+      setLiffUser({
+        lineUid: "local_test_uid_999",
+        name: "",
+        email: "test@example.com",
+        isLoggedIn: true
+      });
+      setIsLiffLoading(false);
+      return;
+    }
+
+    // 💡 2. 線上正式環境：執行真正的 LINE LIFF 初始化與登入流程
     const LIFF_ID = "2010936171-7Xd34Q7R"; 
 
     liff.init({ liffId: LIFF_ID })
       .then(() => {
         if (!liff.isLoggedIn()) {
-          // 如果使用者是用一般瀏覽器打開，引導她進行 LINE 登入
-          // 若是在 LINE App 內部打開，會自動帶過
           liff.login();
         } else {
-          // 已經登入，抓取使用者的 LINE 個人檔案
           liff.getProfile().then(profile => {
             setLiffUser({
-              lineUid: profile.userId,       // 👑 這就是我們要的唯一 line_uid！
-              name: profile.displayName || '', // LINE 顯示名稱（可以預填到步驟一的姓名欄位）
-              email: liff.getDecodedIDToken()?.email || '', // 若有勾選 email 權限可一併抓取
+              lineUid: profile.userId,
+              name: '',
+              email: liff.getDecodedIDToken()?.email || '',
               isLoggedIn: true
             });
             setIsLiffLoading(false);
@@ -42,11 +49,10 @@ export const useLiffAuth = () => {
         }
       })
       .catch((err) => {
-        console.error("LINE LIFF 初始化失敗:", err);
-        // 💡 容錯機制：如果是在本地離線測試環境 (localhost)，給予一個測試用 UID 避免畫面卡死
+        console.error("LINE LIFF 線上初始化失敗:", err);
         setLiffUser({
-          lineUid: "local_test_uid_999",
-          name: "測試貴賓",
+          lineUid: "fallback_user_uid",
+          name: "",
           email: "",
           isLoggedIn: true
         });

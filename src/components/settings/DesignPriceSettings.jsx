@@ -95,6 +95,9 @@ const DesignPriceSettings = () => {
             alert("✅ 儲存成功！");
             await fetchItems(); // 重新撈取最新的真實資料
         } catch (error) {
+            console.error("❌ 捕捉到的真正錯誤物件：", error);
+            console.error("❌ 錯誤訊息 (error.message)：", error.message);
+            console.error("❌ 錯誤堆疊 (error.stack)：", error.stack);
             alert("儲存失敗，請檢查網路或資料格式。");
         } finally {
             setSaving(false);

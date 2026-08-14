@@ -80,7 +80,7 @@ const AppointmentEditModal = ({ appointment, isOpen, onClose, onRefresh }) => {
                 {/* 彈窗標頭 */}
                 <div className="p-5 bg-gray-900 text-white flex justify-between items-center">
                     <div>
-                        <h3 className="text-base font-black">聯合編輯面板 (共享核心)</h3>
+                        <h3 className="text-base font-black">編輯面板</h3>
                         <p className="text-[10px] text-gray-400 mt-0.5">
                             預約單號 #{appointment.id} & 紀錄單號 {appointment.record?.id ? `#${appointment.record.id}` : '(尚未申報)'}
                         </p>
