@@ -2,12 +2,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
 import { useLiffAuth } from '../hooks/useLiffAuth';
+// 💡 1. 引入預約注意事項彈窗組件
+import { BookingNoticeModal } from '../components/modals/BookingNoticeModal';
 
 // 💡 模組級全域鎖：獨立於 React 生命週期與 State 重繪之外，0 毫秒同步卡死連點
 let isGlobalSubmitting = false;
 
 const BookingPage = () => {
   const { liffUser, isLiffLoading } = useLiffAuth();
+
+  // 💡 2. 預約注意事項彈窗開關 (預設一進入頁面就彈出)
+  const [showNoticeModal, setShowNoticeModal] = useState(true);
 
   // 從自訂 Hook 解構出全域狀態與控制大腦
   const {
@@ -29,7 +34,7 @@ const BookingPage = () => {
     memo: ''
   });
 
-  // 💡 修正：移除預填 LINE 顯示名稱 (liffUser.name)，僅在有取得 Email 時自動帶入 Email
+  // 修正：僅在有取得 Email 時自動帶入 Email
   useEffect(() => {
     if (liffUser.email && !localForm.email) {
       setLocalForm(prev => ({ ...prev, email: liffUser.email }));
@@ -105,7 +110,6 @@ const BookingPage = () => {
   // 終極送出核銷 (原生 DOM + 模組鎖雙重防護)
   // ==========================================
   const handleFinalSubmit = async (e) => {
-    // 🛑 1. 第一道防線：模組級全域鎖 (0 毫秒攔截第二次點擊)
     if (isGlobalSubmitting) {
       console.warn('⛔ [防爆鎖] 手動連點被模組鎖攔截！');
       return;
@@ -113,7 +117,6 @@ const BookingPage = () => {
 
     isGlobalSubmitting = true;
 
-    // 🛑 2. 第二道防線：DOM 節點物理切斷 (讓瀏覽器直接無視所有後續滑鼠點擊)
     const btnTarget = e.currentTarget;
     if (btnTarget) {
       btnTarget.style.pointerEvents = 'none';
@@ -132,7 +135,6 @@ const BookingPage = () => {
 
       const isSuccess = await submitBooking(startDateTime, liffUser);
 
-      // 預約失敗時解鎖，允許客人更換時段重試
       if (!isSuccess) {
         isGlobalSubmitting = false;
         if (btnTarget) {
@@ -171,6 +173,12 @@ const BookingPage = () => {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
+
+      {/* 💡 3. 預約前注意事項彈窗 (蓋在最上層，點擊同意後關閉) */}
+      <BookingNoticeModal
+        isOpen={showNoticeModal}
+        onConfirm={() => setShowNoticeModal(false)}
+      />
 
       {/* 🔒 全螢幕霧面鎖定遮罩 */}
       {isSubmitting && (
@@ -277,7 +285,7 @@ const BookingPage = () => {
               { title: "手部美甲", list: handServices },
               { title: "足部美甲", list: footServices },
               { title: "純保養/純卸甲", list: pureRemovalServices },
-              { title: "采耳", list: earServices || [] } // 🆕 新增采耳分類群組
+              { title: "采耳", list: earServices || [] }
             ].map((group, gIdx) => group.list && group.list.length > 0 && (
               <div key={gIdx} className="space-y-2">
                 <h3 className="text-xs font-black text-[#8c7654] tracking-wider bg-[#f4f1eb]/60 px-3 py-1.5 rounded-lg w-max">
