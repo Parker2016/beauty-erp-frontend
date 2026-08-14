@@ -71,23 +71,32 @@ const SingleDayShiftModal = ({ isOpen, onClose, providerId, dateStr, initialShif
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* 是否公休開關 */}
+                    {/* 燈號按鈕切換 */}
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                        <span className="text-xs font-bold text-gray-700">當日是否公休？</span>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                checked={isOff} 
-                                onChange={(e) => setIsOff(e.target.checked)}
-                                className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                        </label>
+                        <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-gray-700">當日狀態</span>
+                            {isOff && (
+                                <span className="text-[11px] text-gray-400 font-bold">
+                                    整日不開放預約
+                                </span>
+                            )}
+                        </div>
+                        <button 
+                            type="button" 
+                            onClick={() => setIsOff(!isOff)}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-bold border transition-all ${
+                                isOff 
+                                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' 
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            }`}
+                        >
+                            {isOff ? '✕ 當日公休' : '✓ 正常營業'}
+                        </button>
                     </div>
 
                     {!isOff && (
                         <>
-                            {/* 上下班時間 */}
+                            {/* 上下班時間 (Grid 2 欄完整寬度) */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-600 mb-1">上班時間</label>
@@ -95,7 +104,7 @@ const SingleDayShiftModal = ({ isOpen, onClose, providerId, dateStr, initialShif
                                         type="time" 
                                         value={startTime} 
                                         onChange={(e) => setStartTime(e.target.value)}
-                                        className="w-full p-2.5 text-xs border border-gray-200 rounded-xl font-mono font-bold focus:border-black focus:outline-none"
+                                        className="w-full p-2.5 text-xs border border-gray-200 rounded-xl font-mono font-bold focus:border-black focus:outline-none bg-white"
                                     />
                                 </div>
                                 <div>
@@ -104,12 +113,12 @@ const SingleDayShiftModal = ({ isOpen, onClose, providerId, dateStr, initialShif
                                         type="time" 
                                         value={endTime} 
                                         onChange={(e) => setEndTime(e.target.value)}
-                                        className="w-full p-2.5 text-xs border border-gray-200 rounded-xl font-mono font-bold focus:border-black focus:outline-none"
+                                        className="w-full p-2.5 text-xs border border-gray-200 rounded-xl font-mono font-bold focus:border-black focus:outline-none bg-white"
                                     />
                                 </div>
                             </div>
 
-                            {/* 當日自訂休息時段 (Break Times) */}
+                            {/* 當日自訂休息時段 (支援橫向滑桿 overflow-x-auto) */}
                             <div>
                                 <div className="flex justify-between items-center mb-1.5">
                                     <label className="text-xs font-bold text-gray-600">當日自訂休息時段 (選填)</label>
@@ -129,19 +138,22 @@ const SingleDayShiftModal = ({ isOpen, onClose, providerId, dateStr, initialShif
                                 ) : (
                                     <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                                         {breakTimes.map((bt, index) => (
-                                            <div key={index} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
+                                            <div 
+                                                key={index} 
+                                                className="flex items-center space-x-2 bg-gray-50 p-2 rounded-xl border border-gray-200 overflow-x-auto whitespace-nowrap"
+                                            >
                                                 <input 
                                                     type="time" 
                                                     value={bt.start} 
                                                     onChange={(e) => handleBreakTimeChange(index, 'start', e.target.value)}
-                                                    className="p-1.5 text-xs border border-gray-200 rounded-lg font-mono font-bold bg-white"
+                                                    className="p-1.5 text-xs border border-gray-200 rounded-lg font-mono font-bold bg-white focus:border-black focus:outline-none"
                                                 />
                                                 <span className="text-xs text-gray-400">至</span>
                                                 <input 
                                                     type="time" 
                                                     value={bt.end} 
                                                     onChange={(e) => handleBreakTimeChange(index, 'end', e.target.value)}
-                                                    className="p-1.5 text-xs border border-gray-200 rounded-lg font-mono font-bold bg-white"
+                                                    className="p-1.5 text-xs border border-gray-200 rounded-lg font-mono font-bold bg-white focus:border-black focus:outline-none"
                                                 />
                                                 <button 
                                                     type="button" 
