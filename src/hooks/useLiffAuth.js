@@ -5,6 +5,7 @@ export const useLiffAuth = () => {
   const [liffUser, setLiffUser] = useState({
     lineUid: '',
     name: '',
+    lineDisplayName: '',
     email: '',
     isLoggedIn: false
   });
@@ -22,6 +23,7 @@ export const useLiffAuth = () => {
       setLiffUser({
         lineUid: "local_test_uid_999",
         name: "",
+        lineDisplayName: "小美",
         email: "test@example.com",
         isLoggedIn: true
       });
@@ -29,7 +31,7 @@ export const useLiffAuth = () => {
       return;
     }
 
-    // 💡 2. 線上正式環境：執行真正的 LINE LIFF 初始化與登入流程
+    // 2. 線上正式環境：執行真正的 LINE LIFF 初始化與登入流程
     const LIFF_ID = "2010936171-7Xd34Q7R"; 
 
     liff.init({ liffId: LIFF_ID })
@@ -41,6 +43,7 @@ export const useLiffAuth = () => {
             setLiffUser({
               lineUid: profile.userId,
               name: '',
+              lineDisplayName: profile.displayName || '',
               email: liff.getDecodedIDToken()?.email || '',
               isLoggedIn: true
             });
@@ -53,6 +56,7 @@ export const useLiffAuth = () => {
         setLiffUser({
           lineUid: "fallback_user_uid",
           name: "",
+          lineDisplayName: "訪客 (LINE未授權)",
           email: "",
           isLoggedIn: true
         });
