@@ -51,6 +51,20 @@ const AdminCalendarView = () => {
     );
   };
 
+  // LINE 暱稱備援解析器 (直接欄位 ➔ 顧客物件 ➔ 從 memo 解析)
+  const extractLineName = (app) => {
+    if (!app) return null;
+    if (app.line_display_name) return app.line_display_name;
+    if (app.customer?.line_display_name) return app.customer.line_display_name;
+    if (app.memo) {
+      const match = app.memo.match(/LINE 暱稱:\s*([^\n\r]+)/);
+      if (match && match[1] && match[1].trim() !== '無') {
+        return match[1].trim();
+      }
+    }
+    return null;
+  };
+
   const totalDuration = selectedAppointment
     ? (selectedAppointment.services?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0) +
     (selectedAppointment.addons?.reduce((sum, a) => sum + (a.duration_minutes || 0), 0) || 0)
@@ -78,7 +92,7 @@ const AdminCalendarView = () => {
           <select
             value={selectedProviderId}
             onChange={(e) => setSelectedProviderId(e.target.value)}
-            disabled={!isManager} // 💡 員工登入時直接禁用選單切換
+            disabled={!isManager}
             className="px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white shadow-sm focus:border-black focus:outline-none disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
           >
             {isManager ? (
@@ -178,6 +192,8 @@ const AdminCalendarView = () => {
                   <div className="flex-1 space-y-2 md:overflow-y-auto md:max-h-[400px] pr-0 md:pr-1">
                     {dayApps.map(app => {
                       const isCurrentSelected = selectedAppointment?.id === app.id;
+                      const lineName = extractLineName(app);
+
                       return (
                         <div
                           key={app.id}
@@ -186,11 +202,22 @@ const AdminCalendarView = () => {
                             ${isCurrentSelected ? 'bg-[#cdbfa8] border-[#bcae97] text-white shadow-md' : 'bg-white border-gray-100 hover:border-amber-200 shadow-sm'}`}
                         >
                           <div className="flex justify-between items-center mb-1">
-                            <p className="text-sm md:text-xs font-black truncate max-w-[120px] md:max-w-[70px]">{app.customer?.name || app.customer_name}</p>
+                            <p className="text-sm md:text-xs font-black truncate max-w-[120px] md:max-w-[70px]">
+                              {app.customer?.name || app.customer_name}
+                            </p>
                             <div className={isCurrentSelected ? '!bg-white/10 rounded-md text-white' : ''}>
                               {renderStatusBadge(app.status)}
                             </div>
                           </div>
+
+                          {/* 💡 行事曆卡片上的 LINE 暱稱標籤 */}
+                          {lineName && (
+                            <p className={`text-[10px] font-bold truncate mb-1 flex items-center gap-0.5 ${isCurrentSelected ? 'text-white/90' : 'text-emerald-600'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full inline-block ${isCurrentSelected ? 'bg-white' : 'bg-emerald-500'}`}></span>
+                              <span>LINE: {lineName}</span>
+                            </p>
+                          )}
+
                           <p className={`text-xs md:text-[11px] font-mono font-medium tracking-wide ${isCurrentSelected ? 'text-amber-50' : 'text-gray-400'}`}>
                             ⏱ {app.start_time.substring(11, 16)}
                           </p>
@@ -220,91 +247,101 @@ const AdminCalendarView = () => {
         </div>
 
         {/* 右側 / 手機浮出：精簡唯讀摘要面板 */}
-        {selectedAppointment && (
-          <div className="fixed inset-0 bg-black/40 z-[60] flex items-end justify-center animate-fade-in lg:static lg:bg-transparent lg:z-auto lg:flex-initial lg:w-80 lg:shrink-0">
-            <div className="absolute inset-0 lg:hidden" onClick={() => setSelectedAppointment(null)} />
+        {selectedAppointment && (() => {
+          const selectedLineName = extractLineName(selectedAppointment);
+          return (
+            <div className="fixed inset-0 bg-black/40 z-[60] flex items-end justify-center animate-fade-in lg:static lg:bg-transparent lg:z-auto lg:flex-initial lg:w-80 lg:shrink-0">
+              <div className="absolute inset-0 lg:hidden" onClick={() => setSelectedAppointment(null)} />
 
-            <div className="relative w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-3xl p-6 pb-10 lg:pb-6 shadow-2xl transition-all duration-300 lg:w-full lg:max-h-none lg:rounded-3xl lg:border lg:border-gray-100 lg:shadow-sm lg:sticky lg:top-24">
-              <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-4 lg:hidden" />
+              <div className="relative w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-3xl p-6 pb-10 lg:pb-6 shadow-2xl transition-all duration-300 lg:w-full lg:max-h-none lg:rounded-3xl lg:border lg:border-gray-100 lg:shadow-sm lg:sticky lg:top-24">
+                <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-4 lg:hidden" />
 
-              <div className="flex justify-between items-start border-b border-gray-50 pb-4 mb-4">
-                <div>
-                  <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-md">單號 #{selectedAppointment.id}</span>
-                  <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer?.name || selectedAppointment.customer_name}</h3>
-                </div>
-                <button onClick={() => setSelectedAppointment(null)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full lg:hidden font-bold">✕</button>
-              </div>
-
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-between items-center bg-gray-50 p-2.5 px-3 rounded-xl border border-gray-100/50">
-                  <span className="text-xs text-gray-400 font-bold">預約狀態</span>
-                  {renderStatusBadge(selectedAppointment.status)}
-                </div>
-
-                <div>
-                  <label className="text-xs text-gray-400 block font-medium">聯絡電話</label>
-                  <p className="font-bold text-gray-700 mt-0.5 font-mono">{selectedAppointment.customer?.phone || selectedAppointment.customer_phone || '無資料'}</p>
+                <div className="flex justify-between items-start border-b border-gray-50 pb-4 mb-4">
+                  <div>
+                    <span className="text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded-md">單號 #{selectedAppointment.id}</span>
+                    <h3 className="text-xl font-black text-gray-800 mt-2">{selectedAppointment.customer?.name || selectedAppointment.customer_name}</h3>
+                    {/* 右側摘要面板顯示 LINE 暱稱 */}
+                    {selectedLineName && (
+                      <p className="text-xs text-emerald-600 font-bold flex items-center gap-1 mt-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                        LINE 暱稱：{selectedLineName}
+                      </p>
+                    )}
+                  </div>
+                  <button onClick={() => setSelectedAppointment(null)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 bg-gray-50 rounded-full lg:hidden font-bold">✕</button>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
-                  <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
-                  <p className="font-black text-gray-800 text-base mb-2">
-                    {selectedAppointment.services && selectedAppointment.services.length > 0
-                      ? selectedAppointment.services.map(s => s.name).join(' ＋ ')
-                      : (selectedAppointment.service?.name || selectedAppointment.service_name || '未指定主服務')}
-                  </p>
+                <div className="space-y-4 text-sm">
+                  <div className="flex justify-between items-center bg-gray-50 p-2.5 px-3 rounded-xl border border-gray-100/50">
+                    <span className="text-xs text-gray-400 font-bold">預約狀態</span>
+                    {renderStatusBadge(selectedAppointment.status)}
+                  </div>
 
-                  {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
-                    <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2.5 rounded-xl space-y-1 border border-amber-100/50">
-                      {selectedAppointment.addons.map(a => (
-                        <p key={a.id} className="flex justify-between items-center">
-                          <span>＋ {a.name}</span>
-                          <span className="text-amber-700 font-semibold">NT$ {a.price}</span>
-                        </p>
-                      ))}
+                  <div>
+                    <label className="text-xs text-gray-400 block font-medium">聯絡電話</label>
+                    <p className="font-bold text-gray-700 mt-0.5 font-mono">{selectedAppointment.customer?.phone || selectedAppointment.customer_phone || '無資料'}</p>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
+                    <label className="text-xs text-gray-400 block font-medium">服務明細與加購</label>
+                    <p className="font-black text-gray-800 text-base mb-2">
+                      {selectedAppointment.services && selectedAppointment.services.length > 0
+                        ? selectedAppointment.services.map(s => s.name).join(' ＋ ')
+                        : (selectedAppointment.service?.name || selectedAppointment.service_name || '未指定主服務')}
+                    </p>
+
+                    {selectedAppointment.addons && selectedAppointment.addons.length > 0 && (
+                      <div className="text-xs text-amber-800 font-bold bg-amber-50/60 p-2.5 rounded-xl space-y-1 border border-amber-100/50">
+                        {selectedAppointment.addons.map(a => (
+                          <p key={a.id} className="flex justify-between items-center">
+                            <span>＋ {a.name}</span>
+                            <span className="text-amber-700 font-semibold">NT$ {a.price}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200/50">
+                      <span>⏱ 總計施作時長</span>
+                      <span className="font-bold text-gray-700 font-mono">{totalDuration} 分鐘</span>
                     </div>
-                  )}
 
-                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200/50">
-                    <span>⏱ 總計施作時長</span>
-                    <span className="font-bold text-gray-700 font-mono">{totalDuration} 分鐘</span>
+                    <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                      <span>💰 實收 / 預估收費</span>
+                      <span className="font-black text-amber-900 text-sm font-mono">
+                        {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined
+                          ? `實收 NT$ ${selectedAppointment.final_price}`
+                          : `預估 NT$ ${systemTotal}`}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
-                    <span>💰 實收 / 預估收費</span>
-                    <span className="font-black text-amber-900 text-sm font-mono">
-                      {selectedAppointment.final_price !== null && selectedAppointment.final_price !== undefined
-                        ? `實收 NT$ ${selectedAppointment.final_price}`
-                        : `預估 NT$ ${systemTotal}`}
-                    </span>
+                  <div>
+                    <label className="text-xs text-gray-400 block font-medium">擔當美甲師</label>
+                    <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name || '未指定'}</p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 block font-medium">客戶留言與備註</label>
+                    <p className="text-xs text-gray-500 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl mt-1 leading-relaxed border border-gray-100/30">
+                      {selectedAppointment.memo || '無備註描述'}
+                    </p>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs text-gray-400 block font-medium">擔當美甲師</label>
-                  <p className="font-bold text-gray-700 mt-0.5">{selectedAppointment.provider_name || '未指定'}</p>
+                <div className="mt-6 pt-4 border-t border-gray-50">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center"
+                  >
+                    編輯紀錄
+                  </button>
                 </div>
-
-                <div>
-                  <label className="text-xs text-gray-400 block font-medium">客戶留言與備註</label>
-                  <p className="text-xs text-gray-500 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl mt-1 leading-relaxed border border-gray-100/30">
-                    {selectedAppointment.memo || '無備註描述'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-gray-50">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="w-full py-3.5 bg-gray-900 text-white font-bold text-xs rounded-xl shadow-md hover:bg-black transition-all active:scale-95 text-center"
-                >
-                  ⚡ 開啟聯合編輯 / 現場結帳 ➔
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {!selectedAppointment && (
           <div className="hidden lg:block w-80 shrink-0 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm text-center py-20 text-gray-300 font-medium text-sm sticky top-24">請點擊行事曆卡片<br />查看客戶預約詳情</div>

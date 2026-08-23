@@ -24,7 +24,7 @@ const BookingPage = () => {
   } = useBookingFlow();
 
   // ==========================================
-  // 步驟 1：本地客戶表單暫存狀態 (姓名預設保持空白，由客人手動填寫真實姓名)
+  // 步驟 1：本地客戶表單暫存狀態 (真實姓名由客人手動填寫)
   // ==========================================
   const [localForm, setLocalForm] = useState({
     name: '',
@@ -34,7 +34,7 @@ const BookingPage = () => {
     memo: ''
   });
 
-  // 修正：僅在有取得 Email 時自動帶入 Email
+  // 僅在有取得 Email 時自動帶入 Email
   useEffect(() => {
     if (liffUser.email && !localForm.email) {
       setLocalForm(prev => ({ ...prev, email: liffUser.email }));
@@ -133,6 +133,7 @@ const BookingPage = () => {
       const day = String(selectedDate.getDate()).padStart(2, '0');
       const startDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
 
+      // 💡 傳入包含 lineDisplayName 與 lineUid 的 liffUser
       const isSuccess = await submitBooking(startDateTime, liffUser);
 
       if (!isSuccess) {
@@ -151,7 +152,6 @@ const BookingPage = () => {
     }
   };
 
-  // 重置流程時，同步解開全域鎖
   const handleResetFlow = () => {
     isGlobalSubmitting = false;
     resetFlow();
@@ -174,7 +174,7 @@ const BookingPage = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
 
-      {/* 💡 3. 預約前注意事項彈窗 (蓋在最上層，點擊同意後關閉) */}
+      {/* 💡 預約前注意事項彈窗 */}
       <BookingNoticeModal
         isOpen={showNoticeModal}
         onConfirm={() => setShowNoticeModal(false)}
@@ -216,7 +216,16 @@ const BookingPage = () => {
           <form onSubmit={handleStep1Submit} className="space-y-4 animate-fade-in-up">
             <div>
               <h2 className="text-lg font-black text-gray-800">填寫預約聯絡人資訊</h2>
-              <p className="text-xs text-gray-400 mt-0.5">請填寫正確真實資料，以便 LINE 通知管線對接</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-gray-400">請填寫真實姓名，以便現場核對</p>
+                {/* 顯示抓取到的 LINE 暱稱識別徽章 */}
+                {liffUser.lineDisplayName && (
+                  <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    LINE：{liffUser.lineDisplayName}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -472,9 +481,7 @@ const BookingPage = () => {
         )}
       </main>
 
-      {/* ==========================================
-        📱 底部懸浮固定結帳條列 (動態按鈕 + Spinner + 多重鎖定)
-        ========================================== */}
+      {/* 底部懸浮固定條列 */}
       {step === 5 && (
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white p-4 border-t border-gray-100 flex items-center space-x-3 shadow-[0_-8px_30px_rgba(0,0,0,0.03)] z-40">
           <div className="flex-1 min-w-0">

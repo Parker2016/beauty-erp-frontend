@@ -37,7 +37,7 @@ const AppointmentWithRecordEditor = () => {
           <thead className="bg-gray-50 text-gray-700 font-bold">
             <tr className="text-left border-b border-gray-100">
               <th className="p-4 w-20 text-center">預約編號</th>
-              <th className="p-4">顧客姓名</th>
+              <th className="p-4">顧客姓名 / LINE 暱稱</th>
               <th className="p-4">施作項目與加購</th>
               <th className="p-4">預約時間</th>
               <th className="p-4">實收實付金額</th>
@@ -52,10 +52,21 @@ const AppointmentWithRecordEditor = () => {
                 (app.services?.reduce((sum, s) => sum + Number(s.price || 0), 0) || 0) +
                 (app.addons?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0);
 
+              const lineName = app.line_display_name || app.customer?.line_display_name;
+
               return (
                 <tr key={app.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="p-4 text-center font-mono font-bold text-gray-400">#{app.id}</td>
-                  <td className="p-4 font-bold text-gray-800">{app.customer?.name || app.customer_name}</td>
+                  {/* 同時顯示真實姓名與 LINE 暱稱 */}
+                  <td className="p-4">
+                    <div className="font-bold text-gray-800">{app.customer?.name || app.customer_name}</div>
+                    {lineName && (
+                      <div className="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                        LINE: {lineName}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-4">
                     {/* 💡 2. 名稱呈現修正：將多個主服務名稱用 ＋ 號串接呈現 */}
                     <span className="font-bold text-gray-700">
@@ -117,12 +128,22 @@ const AppointmentWithRecordEditor = () => {
               ? app.services.map(s => s.name).join(' ＋ ')
               : (app.service_name || '無指定項目');
 
+          const lineName = app.line_display_name || app.customer?.line_display_name;
+
           return (
             <div key={app.id} className="p-4 bg-white border border-gray-100 rounded-xl shadow-sm text-left flex flex-col justify-between">
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <span className="font-mono text-xs font-bold text-gray-400">#{app.id}</span>
-                  <h4 className="font-black text-gray-800 text-base mt-0.5">{app.customer?.name || app.customer_name}</h4>
+                  {/* 手機版標題：真實姓名 ＋ LINE 暱稱標籤 */}
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <h4 className="font-black text-gray-800 text-base">{app.customer?.name || app.customer_name}</h4>
+                    {lineName && (
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-100">
+                        LINE: {lineName}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {renderStatusBadge(app.status)}
               </div>
@@ -150,7 +171,7 @@ const AppointmentWithRecordEditor = () => {
                 onClick={() => openEditModal(app)}
                 className="w-full py-2.5 bg-[#f4f1eb] text-[#8c7654] font-bold text-xs rounded-xl active:scale-95 transition-all"
               >
-                開啟編輯面板 ➔
+                編輯記錄
               </button>
             </div>
           );

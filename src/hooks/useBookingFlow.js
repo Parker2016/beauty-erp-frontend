@@ -133,17 +133,18 @@ export const useBookingFlow = () => {
     try {
       const serviceIds = selectedServices.map(s => s.id);
       const addonIds = selectedAddons.map(a => a.id);
-
+      const lineDisplayName = liffUser?.lineDisplayName || liffUser?.name || '無';
       const payload = {
         provider_id: selectedProvider.id,
         service_ids: serviceIds,
         addon_ids: addonIds,
         line_uid: liffUser?.lineUid || `line_user_${Date.now()}`,
+        line_display_name: lineDisplayName === '無' ? '' : lineDisplayName,
         customer_name: customerData.name,
         customer_phone: customerData.phone,
         customer_email: customerData.email || '',
         start_time: startTime,
-        memo: `[客戶聯絡資料]\n姓名: ${customerData.name}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n生日: ${customerData.birthday || '未填'}\n\n[客人客製備註]\n${customerData.memo || '無'}`
+        memo: `[客戶聯絡資料]\n姓名: ${customerData.name}\nLINE 暱稱: ${lineDisplayName}\n電話: ${customerData.phone}\nEmail: ${customerData.email || '無'}\n生日: ${customerData.birthday || '未填'}\n\n[客人客製備註]\n${customerData.memo || '無'}`
       };
 
       await bookingService.createAppointment(payload);
@@ -199,7 +200,7 @@ export const useBookingFlow = () => {
     providers,
     services,
     isLoading,
-    isSubmitting, // 💡 匯出給 UI 使用
+    isSubmitting,
     error,
     step,
     setStep,
