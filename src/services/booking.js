@@ -31,6 +31,27 @@ export const bookingService = {
   // =========================================================================
 
   /**
+   * 帶入年月與多選服務品項，查詢整月每日的空檔狀態 (AVAILABLE / FULL / OFF / PAST)
+   * 對應 Django: GET /api/providers/{providerId}/month_availability/
+   * @param {number} providerId - 美甲師/服務人員 ID
+   * @param {number} year - 查詢年份 (例如 2026)
+   * @param {number} month - 查詢月份 (例如 8)
+   * @param {Array<number>} serviceIds - 多選主服務項目 ID 陣列 (例如 [1, 2])
+   * @param {Array<number>} [addonIds=[]] - 多選加購項目 ID 陣列 (例如 [3, 4])
+   * @returns {Promise<Object>} 包含 month_status 字典與 first_available_date 的物件
+   */
+  getMonthAvailability: (providerId, year, month, serviceIds, addonIds = []) => {
+    return http.get(`providers/${providerId}/month_availability/`, {
+      params: {
+        year: year,
+        month: month,
+        'service_ids[]': serviceIds,
+        'addon_ids[]': addonIds
+      }
+    });
+  },
+
+  /**
    * 帶入日期與多選服務品項，呼叫後端演算法計算無衝突可預約時段
    * 對應 Django: GET /api/providers/{providerId}/available_slots/
    * @param {number} providerId - 美甲師/服務人員 ID

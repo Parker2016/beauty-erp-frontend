@@ -2,30 +2,29 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
 import { useLiffAuth } from '../hooks/useLiffAuth';
-// 💡 1. 引入預約注意事項彈窗組件
 import { BookingNoticeModal } from '../components/modals/BookingNoticeModal';
 
-// 💡 模組級全域鎖：獨立於 React 生命週期與 State 重繪之外，0 毫秒同步卡死連點
+// 模組級全域鎖：獨立於 React 生命週期與 State 重繪之外，0 毫秒同步卡死連點
 let isGlobalSubmitting = false;
 
 const BookingPage = () => {
   const { liffUser, isLiffLoading } = useLiffAuth();
 
-  // 💡 2. 預約注意事項彈窗開關 (預設一進入頁面就彈出)
+  // 預約注意事項彈窗開關 (預設一進入頁面就彈出)
   const [showNoticeModal, setShowNoticeModal] = useState(true);
 
-  // 從自訂 Hook 解構出全域狀態與控制大腦
+  // 從自訂 Hook 解構出全域狀態與控制大腦 (包含新增的 monthStatus, isMonthLoading, fetchMonthAvailability)
   const {
     providers, services, isLoading, isSubmitting, error, step, setStep,
     selectedProvider, selectedServices, selectedAddons,
-    availableSlots, isSlotsLoading, fetchAvailableSlots,
+    monthStatus, isMonthLoading,
+    availableSlots, isSlotsLoading,
+    fetchMonthAvailability, fetchAvailableSlots,
     submitCustomerData, selectProvider, toggleService, confirmServicesAndGoToAddons,
     toggleAddon, confirmAddonsAndGoToCalendar, submitBooking, resetFlow, goBack
   } = useBookingFlow();
 
-  // ==========================================
-  // 步驟 1：本地客戶表單暫存狀態 (真實姓名由客人手動填寫)
-  // ==========================================
+  // 步驟 1：本地客戶表單暫存狀態
   const [localForm, setLocalForm] = useState({
     name: '',
     phone: '',
@@ -34,7 +33,6 @@ const BookingPage = () => {
     memo: ''
   });
 
-  // 僅在有取得 Email 時自動帶入 Email
   useEffect(() => {
     if (liffUser.email && !localForm.email) {
       setLocalForm(prev => ({ ...prev, email: liffUser.email }));
@@ -63,7 +61,23 @@ const BookingPage = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState('');
 
-  // 核心連動：步驟 5 (選日期) 自動呼叫 Django 計算多服務空檔
+  // 1. 當進入 Step 5 或切換月份時，自動呼叫 API 取得整月空檔狀態
+  useEffect(() => {
+    if (step === 5 && selectedProvider && selectedServices.length > 0) {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth() + 1;
+
+      fetchMonthAvailability(selectedProvider.id, year, month).then((firstAvailableDateStr) => {
+        // 如果有找到最快可約日，且目前尚未選日期，自動將日曆聚焦並選取該天！
+        if (firstAvailableDateStr && !selectedDate) {
+          const [y, m, d] = firstAvailableDateStr.split('-').map(Number);
+          setSelectedDate(new Date(y, m - 1, d));
+        }
+      });
+    }
+  }, [step, currentMonth, selectedProvider, selectedServices, fetchMonthAvailability]);
+
+  // 核心連動：當點選特定日期時，呼叫單日具體可用時段
   useEffect(() => {
     if (step === 5 && selectedDate && selectedProvider && selectedServices.length > 0) {
       setSelectedTime('');
@@ -104,17 +118,10 @@ const BookingPage = () => {
   }, [currentMonth]);
 
   const isSameDate = (d1, d2) => d1 && d2 && d1.toDateString() === d2.toDateString();
-  const isPast = (date) => date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  // ==========================================
-  // 終極送出核銷 (原生 DOM + 模組鎖雙重防護)
-  // ==========================================
+  // 終極送出核銷
   const handleFinalSubmit = async (e) => {
-    if (isGlobalSubmitting) {
-      console.warn('⛔ [防爆鎖] 手動連點被模組鎖攔截！');
-      return;
-    }
-
+    if (isGlobalSubmitting) return;
     isGlobalSubmitting = true;
 
     const btnTarget = e.currentTarget;
@@ -133,7 +140,6 @@ const BookingPage = () => {
       const day = String(selectedDate.getDate()).padStart(2, '0');
       const startDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
 
-      // 💡 傳入包含 lineDisplayName 與 lineUid 的 liffUser
       const isSuccess = await submitBooking(startDateTime, liffUser);
 
       if (!isSuccess) {
@@ -157,7 +163,6 @@ const BookingPage = () => {
     resetFlow();
   };
 
-  // 全螢幕同步 Loading 阻斷器
   if (isLoading && step === 1) {
     return <div className="min-h-screen flex justify-center items-center text-[#8c7654] font-bold bg-[#fcfbfa]">沙龍行事曆同步中...</div>;
   }
@@ -174,13 +179,11 @@ const BookingPage = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative pb-28 shadow-2xl text-left">
 
-      {/* 💡 預約前注意事項彈窗 */}
       <BookingNoticeModal
         isOpen={showNoticeModal}
         onConfirm={() => setShowNoticeModal(false)}
       />
 
-      {/* 🔒 全螢幕霧面鎖定遮罩 */}
       {isSubmitting && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white animate-fade-in px-6 pointer-events-none select-none">
           <div className="bg-gray-900/90 p-6 rounded-2xl flex flex-col items-center space-y-3 shadow-2xl border border-white/10 max-w-xs text-center">
@@ -191,7 +194,6 @@ const BookingPage = () => {
         </div>
       )}
 
-      {/* 頂部導覽列 */}
       <header className="bg-white p-5 text-center shadow-sm sticky top-0 z-10 flex items-center border-b border-gray-50">
         {step > 1 && step < 6 && (
           <button onClick={goBack} className="absolute left-5 text-gray-400 hover:text-gray-700 transition-colors">
@@ -202,7 +204,6 @@ const BookingPage = () => {
         <span className="absolute right-5 text-[10px] font-mono bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Step {step}/6</span>
       </header>
 
-      {/* 互斥防護：只有在非成功頁面 (step < 6) 且有錯誤時，才渲染紅色錯誤提示 */}
       {error && step < 6 && (
         <div className="m-4 p-4 bg-red-50 text-red-500 rounded-xl text-xs font-bold leading-relaxed border border-red-100/60 animate-shake">
           {error}
@@ -211,14 +212,13 @@ const BookingPage = () => {
 
       <main className="p-5">
 
-        {/* ================= 步驟 1：填寫個人基本資料 ================= */}
+        {/* 步驟 1 */}
         {step === 1 && (
           <form onSubmit={handleStep1Submit} className="space-y-4 animate-fade-in-up">
             <div>
               <h2 className="text-lg font-black text-gray-800">填寫預約聯絡人資訊</h2>
               <div className="flex items-center justify-between mt-1">
                 <p className="text-xs text-gray-400">請填寫真實姓名，以便現場核對</p>
-                {/* 顯示抓取到的 LINE 暱稱識別徽章 */}
                 {liffUser.lineDisplayName && (
                   <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -259,7 +259,7 @@ const BookingPage = () => {
           </form>
         )}
 
-        {/* ================= 步驟 2：選擇美甲師 (選誰) ================= */}
+        {/* 步驟 2 */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in-up">
             <div>
@@ -282,7 +282,7 @@ const BookingPage = () => {
           </div>
         )}
 
-        {/* ================= 步驟 3：選擇主要項目 (Booking What - 可複選) ================= */}
+        {/* 步驟 3 */}
         {step === 3 && selectedProvider && (
           <div className="space-y-6 animate-fade-in-up">
             <div>
@@ -308,12 +308,12 @@ const BookingPage = () => {
                         key={s.id}
                         onClick={() => toggleService(s)}
                         className={`p-4 border rounded-xl shadow-sm cursor-pointer select-none transition-all active:scale-98 flex flex-col text-left
-                  ${isChecked ? 'border-[#8c7654] bg-[#fdfbf7] shadow-md ring-1 ring-[#8c7654]' : 'border-gray-100 bg-white'}`}
+                          ${isChecked ? 'border-[#8c7654] bg-[#fdfbf7] shadow-md ring-1 ring-[#8c7654]' : 'border-gray-100 bg-white'}`}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-center space-x-2">
                             <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all
-                      ${isChecked ? 'bg-[#8c7654] border-[#8c7654] text-white' : 'border-gray-200 bg-gray-50'}`}>
+                              ${isChecked ? 'bg-[#8c7654] border-[#8c7654] text-white' : 'border-gray-200 bg-gray-50'}`}>
                               {isChecked && <span className="text-[10px]">✓</span>}
                             </div>
                             <h4 className="text-sm font-black text-gray-800">{s.name}</h4>
@@ -341,7 +341,7 @@ const BookingPage = () => {
           </div>
         )}
 
-        {/* ================= 步驟 4：加購項目選填 (可不選) ================= */}
+        {/* 步驟 4 */}
         {step === 4 && selectedServices.length > 0 && (
           <div className="space-y-4 animate-fade-in-up">
             <div>
@@ -389,19 +389,50 @@ const BookingPage = () => {
           </div>
         )}
 
-        {/* ================= 步驟 5：選擇日期與時間空檔 ================= */}
+        {/* ================= 步驟 5：智慧狀態月曆與時間選擇 ================= */}
         {step === 5 && selectedServices.length > 0 && (
           <div className="animate-fade-in-up">
-            <h2 className="text-base font-black text-gray-800 mb-4">挑選預約日期與時間</h2>
+            <h2 className="text-base font-black text-gray-800 mb-1">挑選預約日期與時間</h2>
+            <p className="text-xs text-gray-400 mb-4">系統已自動過濾公休日與已約滿時段</p>
 
             {/* 月曆切換控制器 */}
             <div className="flex justify-between items-center mb-4 text-xs font-bold bg-gray-50 p-2 rounded-xl border border-gray-100/50">
               <div className="flex items-center space-x-2">
-                <button type="button" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 text-gray-400 hover:text-gray-700">&lt;</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+                    setSelectedDate(null); // 💡 切換月份時清空已選日期
+                    setSelectedTime('');
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-700"
+                >
+                  &lt;
+                </button>
                 <span className="text-gray-800">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</span>
-                <button type="button" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 text-gray-400 hover:text-gray-700">&gt;</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+                    setSelectedDate(null); // 💡 切換月份時清空已選日期
+                    setSelectedTime('');
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-700"
+                >
+                  &gt;
+                </button>
               </div>
-              <button type="button" onClick={() => { setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(today); }} className="text-[#8c7654]">定位今天</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                  setSelectedDate(today);
+                  setSelectedTime('');
+                }}
+                className="text-[#8c7654]"
+              >
+                定位今天
+              </button>
             </div>
 
             {/* 星期排頭 */}
@@ -409,27 +440,56 @@ const BookingPage = () => {
               {['一', '二', '三', '四', '五', '六', '日'].map(d => <div key={d}>{d}</div>)}
             </div>
 
-            {/* 日期格子網格 */}
-            <div className="grid grid-cols-7 gap-y-2 mb-6">
-              {calendarDays.map((dateObj, i) => {
-                if (!dateObj) return <div key={i} />;
-                const active = isSameDate(dateObj, selectedDate);
-                const past = isPast(dateObj);
-                return (
-                  <div key={i} className="flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => !past && setSelectedDate(dateObj)}
-                      disabled={past}
-                      className={`w-9 h-9 rounded-full font-bold transition-all text-xs flex items-center justify-center
-                        ${active ? 'bg-gray-900 text-white shadow-md' : past ? 'text-gray-200 cursor-not-allowed' : 'text-gray-700 hover:bg-[#f4f1eb]'}`}
-                    >
-                      {dateObj.getDate()}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+            {/* 💡 日期格子網格 (結合 monthStatus 智慧狀態渲染) */}
+            {isMonthLoading ? (
+              <div className="text-center py-16 text-[#8c7654] text-xs font-bold animate-pulse">
+                正在快速掃描美甲師整月班表與空檔...
+              </div>
+            ) : (
+              <div className="grid grid-cols-7 gap-y-2 mb-6">
+                {calendarDays.map((dateObj, i) => {
+                  if (!dateObj) return <div key={i} />;
+
+                  const year = dateObj.getFullYear();
+                  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const day = String(dateObj.getDate()).padStart(2, '0');
+                  const dateStr = `${year}-${month}-${day}`;
+
+                  const status = monthStatus[dateStr] || 'AVAILABLE'; // 預設安全狀態
+                  const active = isSameDate(dateObj, selectedDate);
+
+                  // 判斷是否可點擊 (只有 AVAILABLE 才可以點擊)
+                  const isAvailable = status === 'AVAILABLE';
+
+                  return (
+                    <div key={i} className="flex flex-col items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => isAvailable && setSelectedDate(dateObj)}
+                        disabled={!isAvailable}
+                        className={`w-9 h-9 rounded-xl font-bold transition-all text-xs flex flex-col items-center justify-center relative
+                          ${active
+                            ? 'bg-gray-900 text-white shadow-md'
+                            : !isAvailable
+                              ? 'text-gray-300 bg-gray-50/50 cursor-not-allowed opacity-50'
+                              : 'text-gray-700 bg-white border border-gray-100 hover:border-[#8c7654]'}`}
+                      >
+                        <span>{dateObj.getDate()}</span>
+                        {/* 狀態小標籤 */}
+                        {isAvailable && !active && (
+                          <span className="w-1 h-1 rounded-full bg-emerald-500 mt-0.5" />
+                        )}
+                        {!isAvailable && status !== 'PAST' && (
+                          <span className="text-[8px] scale-75 text-gray-400 absolute bottom-0.5">
+                            {status === 'FULL' ? '滿' : '休'}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* 當天可用時間按鈕渲染流 */}
             {selectedDate && (
@@ -466,7 +526,7 @@ const BookingPage = () => {
           </div>
         )}
 
-        {/* ================= 步驟 6：預約完美完結成功畫面 ================= */}
+        {/* 步驟 6 */}
         {step === 6 && (
           <div className="text-center py-16 animate-fade-in-up">
             <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">✓</div>
