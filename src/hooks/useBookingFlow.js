@@ -8,10 +8,14 @@ export const useBookingFlow = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // 1. 月度可用狀態與載入狀態
+  const [monthStatus, setMonthStatus] = useState({});
+  const [isMonthLoading, setIsMonthLoading] = useState(false);
+
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
-  // 💡 1. 統一由 Hook 託管：0毫秒記憶體鎖 + 全螢幕遮罩 State
+  // 0毫秒記憶體鎖 + 全螢幕遮罩 State
   const isSubmitLockedRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -54,6 +58,7 @@ export const useBookingFlow = () => {
       setServices(data);
       setSelectedServices([]);
       setSelectedAddons([]);
+      setMonthStatus({});
       setStep(3);
     } catch (err) {
       setError('無法載入該美甲師的造型服務項目，請換人試試或稍後再試。');
@@ -77,6 +82,7 @@ export const useBookingFlow = () => {
     setStep(4);
     setError(null);
     setSelectedAddons([]);
+    setMonthStatus({});
     setAvailableSlots([]);
   };
 
@@ -92,6 +98,30 @@ export const useBookingFlow = () => {
     setError(null);
   };
 
+  // 2. 核心新增：抓取指定年月份的整月可用狀態 (AVAILABLE / FULL / OFF / PAST)
+  const fetchMonthAvailability = useCallback(async (providerId, year, month) => {
+    setIsMonthLoading(true);
+    setError(null);
+    try {
+      const serviceIds = (selectedServices || []).map(s => s.id);
+      const addonIds = (selectedAddons || []).map(a => a.id);
+      const res = await bookingService.getMonthAvailability(providerId, year, month, serviceIds, addonIds);
+
+      const data = res?.data || res || {};
+      const statusMap = data.month_status || {};
+      setMonthStatus(statusMap);
+
+      return data.first_available_date || null;
+    } catch (err) {
+      console.error('整月空檔狀態撈取發生錯誤:', err);
+      setMonthStatus({});
+      return null;
+    } finally {
+      setIsMonthLoading(false);
+    }
+  }, [selectedServices, selectedAddons]);
+
+  // 抓取單日具體可用時段
   const fetchAvailableSlots = useCallback(async (providerId, dateString) => {
     setIsSlotsLoading(true);
     setError(null);
@@ -115,17 +145,13 @@ export const useBookingFlow = () => {
     }
   }, [selectedServices, selectedAddons]);
 
-  // ==========================================
-  // 💡 2. 完美的防爆連點邏輯（核心修復點）
-  // ==========================================
+  // 防爆連點預約送出
   const submitBooking = async (startTime, liffUser) => {
-    // 🛑 如果已經在處理中，直接 0 毫秒 return，且「絕對不去修改 isSubmitting」！
     if (isSubmitLockedRef.current) {
       console.warn('⚠️ [防爆連點] 點擊過快，第二次請求被源頭鎖成功攔截！');
       return false;
     }
 
-    // 🔒 瞬間鎖定記憶體與開啓全螢幕遮罩
     isSubmitLockedRef.current = true;
     setIsSubmitting(true);
     setError(null);
@@ -149,7 +175,6 @@ export const useBookingFlow = () => {
 
       await bookingService.createAppointment(payload);
       
-      // 成功：進入 Step 6（保持遮罩關閉，步驟切換）
       setStep(6);
       return true;
 
@@ -173,7 +198,6 @@ export const useBookingFlow = () => {
       return false;
 
     } finally {
-      // 💡 只有當「第一次請求結束」時，才解開記憶體鎖與遮罩！
       isSubmitLockedRef.current = false;
       setIsSubmitting(false);
     }
@@ -192,6 +216,7 @@ export const useBookingFlow = () => {
     setSelectedProvider(null);
     setSelectedServices([]);
     setSelectedAddons([]);
+    setMonthStatus({});
     setAvailableSlots([]);
     setError(null);
   };
@@ -208,8 +233,11 @@ export const useBookingFlow = () => {
     selectedProvider,
     selectedServices,
     selectedAddons,
+    monthStatus,
+    isMonthLoading,
     availableSlots,
     isSlotsLoading,
+    fetchMonthAvailability,
     fetchAvailableSlots,
     submitCustomerData,
     selectProvider,
